@@ -1,0 +1,446 @@
+---
+title: "Second week: Introduction to R & Rstudio"
+author: "Alaleh Ahmadian Shalchi"
+date: "February 12, 2018"
+output:
+  prettydoc::html_pretty:
+    theme: tactile
+    highlight: github
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r , message=FALSE, warning=FALSE}
+
+
+library(dplyr)
+library(ggplot2)
+library(readr)
+
+MobileData <- read_csv(file="c:/Users/Alaleh/Desktop/Term8/Data_Analysis/Data/mobile_data.csv")
+
+```
+
+
+## Problem 1
+
+We need to find the companies with most phones made so we count phones which have the same company and make a new data frame cotaining company names and counts,
+
+
+```{r , message=FALSE, warning=FALSE}
+
+MobileCounts = MobileData %>% group_by(company) %>% dplyr::summarise(counts = n()) %>% arrange(desc(counts))
+
+Company_Count_Plot <- ggplot(data=head(MobileCounts,20), aes(x=reorder(company,-counts), y=counts)) + geom_bar(stat="identity", fill="steelblue") + theme_minimal() +  theme(axis.text.x = element_text(angle=90)) + labs(x="Company", y="Phones made", title="Most phones made by companies")
+Company_Count_Plot
+
+
+```
+
+The plot shows that Samsung company has made far more phones than any other company which makes us wonder why that is...
+
+
+```{r , message=FALSE, warning=FALSE}
+
+print(head(MobileCounts,1))
+
+```
+
+
+Is it because their phones are better? have more diversity? are cheaper? easier to use? unfortunately we don't have enought data to find out
+
+
+
+## Problem 2
+
+we make plots of all phones grouped by year and their dimensios and camera quality
+
+
+```{r , message=FALSE, warning=FALSE}
+
+LengthMobileData <- data.frame("year" = MobileData$year, 
+                  "dim_length" = MobileData$dim_length) 
+LengthMobileData <- na.omit(LengthMobileData)
+
+Lengths_Plot <- ggplot(LengthMobileData, aes(x=year, y=dim_length),) + geom_point(color="red")+ theme_minimal() +  theme(axis.text.x = element_text(angle=90)) + geom_smooth(method = "lm", se = FALSE) + labs(x="year", y="Phone Length", title="Length by year")
+
+##########
+
+BreadthMobileData <- data.frame("year" = MobileData$year, 
+                  "dim_breadth" = MobileData$dim_breadth) 
+BreadthMobileData <- na.omit(BreadthMobileData)
+
+Breadth_Plot <- ggplot(BreadthMobileData, aes(x=year, y=dim_breadth),) + geom_point(color="blue")+ theme_minimal() +  theme(axis.text.x = element_text(angle=90)) + geom_smooth(method = "lm", se = FALSE) + labs(x="year", y="Phone breadth", title="Breadth by year")
+
+##########
+
+
+ThicknessMobileData <- data.frame("year" = MobileData$year, 
+                  "dim_thickness" = MobileData$dim_thickness) 
+ThicknessMobileData <- na.omit(ThicknessMobileData)
+
+Thickness_Plot <- ggplot(ThicknessMobileData, aes(x=year, y=dim_thickness),) + geom_point(color="green")+ theme_minimal() +  theme(axis.text.x = element_text(angle=90)) + geom_smooth(method = "lm", se = FALSE) + labs(x="year", y="Phone thickness", title="Thickness by year")
+
+##########
+
+
+CameraMobileData <- data.frame("year" = MobileData$year, 
+                  "cam_px" = MobileData$cam_px) 
+CameraMobileData <- na.omit(CameraMobileData)
+
+Camera_Plot <- ggplot(CameraMobileData, aes(x=year, y=cam_px),) + geom_point(color="brown")+ theme_minimal() +  theme(axis.text.x = element_text(angle=90)) + geom_smooth(method = "lm", se = FALSE) + labs(x="year", y="Camera quality(px)", title="Camera quality by year")
+
+
+```
+
+
+
+```{r , message=FALSE, warning=FALSE}
+
+Lengths_Plot
+
+```
+
+
+Since the beginning of 1990s until before the year 2005 the changes in phone lengths are descending, but since 
+2005 up to current times it takes an ascending turn. overall by this plot alone we don't comprehend much but maybe putting it together with the next two plots we can understand something about the overall dimension of phones over time.
+
+
+```{r , message=FALSE, warning=FALSE}
+
+Breadth_Plot
+
+```
+
+
+The plot shows that over time breadth of phones, made has take on an ascending approach.
+
+
+```{r , message=FALSE, warning=FALSE}
+
+Thickness_Plot
+
+```
+
+
+
+Throughout time the thickness of phones has descended
+
+
+
+
+```{r , message=FALSE, warning=FALSE}
+
+Camera_Plot
+
+
+```
+
+
+
+The Data shows that phones didn't have cameras up to the beginning of 2000s but after that implementing cameras became a normal thing and probably since the market probably responded well to cameras on phones and many people started to use phone cameras instead of home cameras, camera quality on phones got higher very fast.
+
+
+The  overall length is more than breadth and breadth is more than thickness which complies with the rectangualar thin picture of every cellphone
+Throughout time thickness has gotten even less but length and breadth has become more which shows that phones are getting bigger in display size.
+
+
+
+
+## Problem 3
+
+We group the data by number of simcards and LTE then calculate average of price of each group
+
+```{r , message=FALSE, warning=FALSE}
+
+mobilePrices = MobileData
+mobilePrices %>% group_by(sim_no, LTE) %>% summarise(price=mean(price, na.rm = TRUE)) -> mobilePrices
+PricePlot = ggplot(mobilePrices, aes(x=sim_no, y=price)) + geom_bar(stat = "identity", aes(fill=LTE)) + xlab("Number of Sim Cards") + ylab("Average Price (Euro)")
+
+PricePlot
+
+```
+
+
+## Problem 4
+
+We group the data by year, and then make a box plot for thickness of phones that have an audio jack vs. the ones that don't
+
+
+```{r , message=FALSE, warning=FALSE}
+
+MobilesOf2017 = MobileData[which(MobileData$year==2017),]
+MobilesOf2017 = na.omit(MobilesOf2017)
+PhoneBoxPlot = ggplot(MobilesOf2017, aes(audio_jack,dim_thickness)) + geom_boxplot(fill="skyblue") + labs(x='Headphone Jack', y='Thickness', title='Thickness vs Headphone jack')
+
+PhoneBoxPlot
+
+
+```
+
+
+plot shows that phones with headphone jacks are slightly thicker which may be relevant to the jack 
+
+
+## Problem 5
+
+Omitting NA Data we compute PPI for each phone by the formula sqrt(px_col^2 + px_row^2)/display_size 
+
+```{r , message=FALSE, warning=FALSE}
+
+PPI_Data = MobileData[,c('device','display_size','px_row','px_col','year')]
+PPI_Data = na.omit(PPI_Data)
+PPI_Data$PPI = sqrt(PPI_Data$px_row^2 + PPI_Data$px_col^2) / PPI_Data$display_size
+PPI_Data %>% arrange(desc(PPI)) -> PPI_Data
+PPI_Plot = ggplot(data = PPI_Data, aes(x=PPI)) + labs(title='PPI Histogram') + geom_histogram(color="black", fill="lightblue",) + theme_minimal()
+PPI_Plot
+
+```
+
+
+```{r , message=FALSE, warning=FALSE}
+
+PPI_Data %>% group_by(year) %>% summarise(average=mean(PPI)) -> Mean_PPI
+Mean_PPI_Plot = ggplot(data = Mean_PPI, aes(x=year , y=average)) + geom_point()+ labs(title='PPI Mean') + theme_minimal()
+Mean_PPI_Plot
+
+```
+
+Plot shows that PPI is ascending over time so phone display quality is rising
+
+```{r , message=FALSE, warning=FALSE}
+
+  print(head(PPI_Data,1))
+
+```
+
+
+## Problem 6
+
+For each phone we define hugeness as how big and how heavy it is overall which comes from hugeness=(weight/max(weight))+(volume/max(volume))
+The bigger the above sum is, the gooshtkoober our phone is
+
+p.s. trying this on all data gives many tablets which aren't actually phones to be called gooshtkoob, so I removed any device with display_size>7 to get only phones
+
+
+```{r , message=FALSE, warning=FALSE}
+
+FullMobileData <- data.frame("device" = MobileData$device, 
+                  "company" = MobileData$company,
+                  "weight" = MobileData$weight,
+                  "dim_breadth" = MobileData$dim_breadth,
+                  "dim_length" = MobileData$dim_length,
+                  "dim_thickness" = MobileData$dim_thickness,
+                  "display_size" = MobileData$display_size) 
+
+FullMobileData = FullMobileData[which(FullMobileData$display_size<7),]
+FullMobileData <- na.omit(FullMobileData)
+
+FullMobileData$weight = 30*FullMobileData$weight/max(FullMobileData$weight)
+FullMobileData$volume = FullMobileData$dim_breadth*FullMobileData$dim_length*FullMobileData$dim_thickness
+FullMobileData$volume = 30*FullMobileData$volume/max(FullMobileData$volume)
+FullMobileData$hugeness = FullMobileData$volume + FullMobileData$weight
+
+ggplot(FullMobileData, aes(x=reorder(device, hugeness),y=hugeness)) + geom_point() 
+
+
+```
+
+
+```{r , message=FALSE, warning=FALSE}
+
+head(FullMobileData[order(FullMobileData$hugeness, decreasing= T),c("device","company","hugeness")], n = 10)
+
+```
+
+
+
+
+## Problem 7
+
+
+We compute density for each phone (not considering the empty air space inside them) and we sort all the phones by density. any phone under density=0.001 line, stays on water
+
+```{r , message=FALSE, warning=FALSE}
+
+FullMobileData <- data.frame("device" = MobileData$device, 
+                  "company" = MobileData$company,
+                  "weight" = MobileData$weight,
+                  "dim_breadth" = MobileData$dim_breadth,
+                  "dim_length" = MobileData$dim_length,
+                  "dim_thickness" = MobileData$dim_thickness) 
+
+FullMobileData <- na.omit(FullMobileData)
+
+FullMobileData$density = FullMobileData$weight/(FullMobileData$dim_breadth * FullMobileData$dim_length * FullMobileData$dim_thickness)
+FullMobileData = FullMobileData[with(FullMobileData, order(density)),]
+
+DensityData = ggplot(FullMobileData, aes(x=reorder(device, density),y=density)) + geom_point() + theme_minimal() + 
+    geom_hline(yintercept = 0.001)  
+
+DensityData
+
+
+```
+
+
+we removed all the Null data from our data frame so they won't mess with our conclusions.
+
+
+Number of phones that won't drown:
+
+```{r , message=FALSE, warning=FALSE}
+
+undrowned_phones = filter(FullMobileData, density<0.001)
+print(nrow(undrowned_phones))
+
+```
+
+
+Data for phones that don't drown:
+
+```{r , message=FALSE, warning=FALSE}
+
+print(undrowned_phones[c("device","company","density")])
+
+```
+
+
+## Problem 8
+
+We remove NA data so they won't mess with calculations, and plot battery/weight plot
+
+```{r , message=FALSE, warning=FALSE}
+
+FullMobileData <- data.frame("device" = MobileData$device, 
+                  "company" = MobileData$company,
+                  "weight" = MobileData$weight,
+                  "battery_mah" = MobileData$battery_mah) 
+
+FullMobileData <- na.omit(FullMobileData)
+
+ggplot(FullMobileData, aes(battery_mah, weight)) +
+  geom_point(shape = 16, size = 2) +
+  theme_minimal()
+
+
+```
+
+
+```{r , message=FALSE, warning=FALSE}
+
+library(ggpubr)
+cor(FullMobileData$battery_mah, FullMobileData$weight, method = "pearson")
+cor.test(FullMobileData$battery_mah, FullMobileData$weight, method="pearson")
+
+
+```
+
+
+
+
+## Problem 9
+
+Flagship has no definite meaning, the closest we found is the most expensive phones a company makes over time.
+
+
+```{r , message=FALSE, warning=FALSE}
+
+Flagships <- subset(MobileData, company=="Apple")
+Flagships = na.omit(Flagships)
+Flagships <- Flagships[order(-Flagships$price),]
+
+Flagship_Plot <- ggplot(data=head(Flagships,20), aes(x=year, y=price)) + geom_point() + theme_minimal() + labs(y="Price", x="Year", title="Flagship phones") + geom_text(aes(label=device),hjust=0, vjust=0)
+Flagship_Plot
+
+
+```
+
+
+## Problem 10
+
+For the first interesting plot I chose to find average ram to price ratio for each phone which shows over time what changes have been made to ram and price. since RAM has a small value, to get a better understanding of data and the ratio we multiply it by 100
+
+
+```{r , message=FALSE, warning=FALSE}
+
+MobileDatarm = na.omit(MobileData)
+MobileDatarm$ram_price_ratio = MobileDatarm$ram*100/MobileDatarm$price
+MobileDatarm %>% group_by(year) %>% summarise(average = mean(ram_price_ratio)) -> MobileDatarm
+
+CamerasPlot <- ggplot(MobileDatarm, aes(x=year, y=average)) + geom_line(stat = "identity") + theme_minimal() + labs(x="year", y="average ram to price ratio", title="Average ratio of ram ro price over time")
+CamerasPlot
+
+```
+
+We see that overall ratio of RAM to price of phones has been ascending axcept a fall in 2016 to 2017 and we wonder why that is since RAM hasn't change much
+
+
+```{r , message=FALSE, warning=FALSE}
+
+ramDatarm = na.omit(MobileData)
+ramDatarm %>% group_by(year) %>% summarise(average = mean(ram*100)) -> ramDatarm
+
+ramPlot <- ggplot(ramDatarm, aes(x=year, y=average)) + geom_line(stat = "identity") + theme_minimal() + labs(x="year", y="average ram", title="ram over time")
+ramPlot
+
+```
+
+RAM has been getting more and more in phones which makes sense since smart phones are getiing stronger every day
+
+
+```{r , message=FALSE, warning=FALSE}
+
+priceDatarm = na.omit(MobileData)
+priceDatarm %>% group_by(year) %>% summarise(average = mean(price)) -> priceDatarm
+
+pricePlot <- ggplot(priceDatarm, aes(x=year, y=average)) + geom_line(stat = "identity") + theme_minimal() + labs(x="year", y="average price", title="price over time")
+pricePlot
+
+```
+
+Phone prices seems to have been very steady over a period of 7 years but since 2016 to 2017 it has quickly raised a lot which explains the fall in the first plot.
+
+
+****************************************************
+
+For the second interesting plot I chose to find battery power of phones that have a built-in gpu since I suppose they must have a strong battery cause GPUs use a lot of power
+
+
+```{r , message=FALSE, warning=FALSE}
+
+GPUDatarm = na.omit(MobileData)
+
+GPUPlot <- ggplot(GPUDatarm, aes(x=gpu, y=battery_mah)) + geom_point() + theme_minimal() + labs(x="GPU", y="Batter power (mah)", title="GPU to battery power plot")
+GPUPlot
+
+```
+
+
+Contrary to what I though most of phones with GPUs don't use very powerful batteries which may lead to them having to change batteries soon.
+
+
+
+
+****************************************************
+
+For the third interesting plot I chose find row to column ratio of phones to see whether they're getting wider or not because i feel like it's getting  harder to fit phones on our hands lately
+
+
+```{r , message=FALSE, warning=FALSE}
+
+widenessDatarm = na.omit(MobileData)
+widenessDatarm$wideness_ratio = widenessDatarm$px_col/widenessDatarm$px_row
+widenessDatarm %>% group_by(year) %>% summarise(average = mean(wideness_ratio)) -> widenessDatarm
+
+widenessPlot <- ggplot(widenessDatarm, aes(x=year, y=average)) + geom_line(stat = "identity") + theme_minimal() + labs(x="year", y="average wideness", title="Average ratio of phone wideness")
+widenessPlot
+
+```
+
+
+so overall phone displays (and phones themselves) are getting wider
+
+
