@@ -1,0 +1,773 @@
+---
+title: "Third Week: Exploratory Data Analysis"
+author: "Alaleh Ahmadian Shalchi"
+date: "February 21, 2018"
+output:
+  prettydoc::html_pretty:
+    theme: tactile
+    highlight: github
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = T)
+```
+
+
+```{r , message=FALSE, warning=FALSE}
+
+library(dplyr)
+library(engsoccerdata)
+library(shiny)
+library(highcharter)
+library(ggplot2)
+spain = as.data.frame(spain)
+All_seasons = sort(unique(spain$Season))
+All_Teams = unique(spain$home)
+Championships <- data.frame(cteam=unique(spain$home),point=as.vector(matrix(0,nrow=61)), stringsAsFactors=FALSE)
+Team_goals = data.frame(cteam=unique(spain$home),goals_scored=as.vector(matrix(0,nrow=61)),goals_conceded=as.vector(matrix(0,nrow=61)), stringsAsFactors=FALSE)
+
+```
+
+
+Function get_rankings_by_time works by getting a season and an end date then gives the data of the games played in league and scores up until that day
+
+count_points determines how many points a team should get based on result of the game
+
+get_rankings gives full table data for a season
+
+```{r , message=FALSE, warning=FALSE}
+
+
+## Functions
+
+team_rankings_by_time <- function (season=NULL, end = NULL) 
+{
+  GA <- GF <- ga <- gf <- gd <- GD <- D <- L <- W <- Pts <- . <- Date <- home <- team <- visitor <- hgoal <- opp <- vgoal <- goaldif <- FT <- division <- result <- maxgoal <- mingoal <- absgoaldif <- NULL
+  spainx <- spain[(spain$Season == season), ]
+  spainx <- spainx[(spainx$Date <= end), ]
+
+  temp <- rbind(dplyr::select(spainx, team = home, opp = visitor, 
+                                GF = hgoal, GA = vgoal), dplyr::select(spainx, team = visitor, 
+                                opp = home, GF = vgoal, GA = hgoal))
+  temp <- temp %>% dplyr::mutate(GD = GF - GA) %>% dplyr::group_by(team) %>% 
+    dplyr::summarise(GP = sum(GD <= 100), W = sum(GD > 0), 
+                     D = sum(GD == 0), L = sum(GD < 0), gf = sum(GF), 
+                     ga = sum(GA), gd = sum(GD)) %>% dplyr::mutate(Pts = (W * 
+                    3) + D) %>% dplyr::arrange(-Pts, -gd, -gf) %>% dplyr::mutate(Pos = rownames(.)) %>% 
+    as.data.frame()
+  return(temp)
+}
+
+count_points = function(GoalsD){
+  result = vector(mode = typeof(GoalsD[1]), length = length(GoalsD))
+  for (i in 1:length(GoalsD)){
+    if (GoalsD[i]>0){result[i]=3}
+    else if (GoalsD[i]==0){result[i]=1}
+    else{result[i]=0}}
+  return(result)
+}
+
+get_rankings <- function (df = spain, Season, pts) {
+  
+  Goals_Conceded <- Goals_Scored <- Goals_Conceded <- Goals_Scored <- Goal_Difference <- Goal_Difference <- D <- L <- W <- Pts <- . <- Date <- home <- team <- visitor <- hgoal <- opp <- vgoal <- goaldif <- FT <- division <- result <- maxgoal <- mingoal <- absgoaldif <- NULL
+  spainx <- df[(df$Season == Season), ]
+  ans <- rbind(spainx %>% dplyr::select(team = home, opp = visitor,
+                                        Goals_Scored = hgoal, Goals_Conceded = vgoal),
+               spainx %>% dplyr::select(team = visitor, opp = home,
+                                        Goals_Scored = vgoal, Goals_Conceded = hgoal)) %>% dplyr::mutate(Goal_Difference = Goals_Scored - Goals_Conceded) %>% dplyr::group_by(team) %>% dplyr::summarise(Goals_Concededmes_Played = sum(Goal_Difference <= 100), W = sum(Goal_Difference > 0), D = sum(Goal_Difference == 0), L = sum(Goal_Difference < 0), Goals_Scored = sum(Goals_Scored), Goals_Conceded = sum(Goals_Conceded),Goal_Difference = sum(Goal_Difference)) %>% 
+    dplyr::mutate(Pts = (W *  pts) + D) %>% 
+    dplyr::arrange(-Pts, -Goal_Difference, -Goals_Scored) %>% 
+    dplyr::mutate(Pos = rownames(.)) %>% as.data.frame()
+  return(ans)
+  
+}
+
+```
+
+
+
+## Problem 1
+
+We sum score of each team then compute goal difference and goals scored and sort the data by these three
+
+```{r , message=FALSE, warning=FALSE}
+
+Champion_times = data.frame(Team=All_Teams, num=rep(0,length(All_Teams)), stringsAsFactors=FALSE)
+season_champ = data.frame(season=All_seasons, winner=NA)
+
+for (cur_season in 1:length(All_seasons)){
+  
+  if (All_seasons[cur_season]<1996){rankings_df = get_rankings(spain,All_seasons[cur_season],2)}
+  else{rankings_df = get_rankings(spain,All_seasons[cur_season],3)}
+  
+  cur_champ = rankings_df[which(rankings_df$Pos==1),]$team
+  Champion_times[which(Champion_times$Team==cur_champ),]$num = Champion_times[which(Champion_times$Team==cur_champ),]$num + 1
+  season_champ$winner[season_champ$season==All_seasons[cur_season]] = cur_champ
+  
+}
+
+Champion_times = Champion_times[with(Champion_times,order(-num)),]
+
+highchart() %>% 
+  hc_chart(type = "column") %>% 
+  hc_title(text = "Most La liga Championships") %>% 
+  hc_xAxis(categories = Champion_times$Team[1:9]) %>% 
+  hc_add_series(data = Champion_times$num[1:9],
+                name = "Championships")
+
+ggplot(data=head(Champion_times,10), aes(x=reorder(Team,-num), y=num)) + geom_bar(stat="identity", fill="steelblue") + theme_minimal() +  theme(axis.text.x = element_text(angle=90)) + labs(x="Teams", y="Championships", title="Championships by teams")
+
+```
+
+
+## Problem 2
+
+We define number_of_goals/number_of_Goals_Concededmes to be an identity of a boringness the less this number is the more boring that concept is. to make it easier to see I changed it to 5-number_of_goals/number_of_Goals_Concededmes so the most boring concept has the most boringness amount
+
+```{r , message=FALSE, warning=FALSE}
+
+data.frame(spain %>% group_by(Season) %>% summarise(boredom=5-(sum(hgoal+vgoal)/length(Season)))) %>% arrange(-boredom) -> season_boringness
+print(season_boringness[1,]$Season)
+
+data.frame(spain %>% group_by(home) %>% summarise(boredom=3-(sum(hgoal)/length(home)))) %>% arrange(-boredom) -> team_boringness
+print(team_boringness[1,]$home)
+
+
+highchart() %>% 
+  hc_chart(type = "line") %>% 
+  hc_title(text = "How boring spanish teams are") %>% 
+  hc_xAxis(categories = team_boringness$home[1:10]) %>% 
+  hc_add_series(data = team_boringness$boredom[1:10],
+                name = "boringness") %>%  hc_add_theme(hc_theme_sandsignika())
+
+ggplot(data=head(team_boringness,10), aes(x=reorder(home,-boredom), y=boredom)) + geom_bar(stat="identity", fill="steelblue") + theme_minimal() +  theme(axis.text.x = element_text(angle=90)) + labs(x="Teams", y="Boringness", title="Boringness of teams")
+
+
+highchart() %>% 
+  hc_chart(type = "line") %>% 
+  hc_title(text = "How boring spanish leagues are") %>% 
+  hc_xAxis(categories = season_boringness$Season[1:10]) %>% 
+  hc_add_series(data = season_boringness$boredom[1:10],
+                name = "boringness")
+
+ggplot(data=head(season_boringness,10), aes(x=reorder(Season,-boredom), y=boredom)) + geom_bar(stat="identity", fill="steelblue") + theme_minimal() +  theme(axis.text.x = element_text(angle=90)) + labs(x="Teams", y="Boringness", title="Boringness of teams")
+
+
+```
+
+
+
+
+## Problem 3
+
+We have to separate first game between each two teams from the second one and count the points for that half-league, then compare it to season winner which we have from the first problem.
+
+```{r , message=FALSE, warning=FALSE}
+
+All_seasons = sort(All_seasons)
+ans = 0
+
+for (this_season in 1:length(All_seasons)){
+  
+  season_games = filter(spain,Season==All_seasons[this_season])
+  season_teams = unique(season_games$home)
+  played_games = data.frame(expand.grid(season_teams,season_teams))
+  names(played_games) = c("Home","Visitor")
+  played_games$flag = FALSE
+  season_games = season_games[order(season_games$Date),]
+  half_season = season_games
+  half_points = data.frame(team = season_teams, Points=0)
+  
+  for (game in 1:dim(season_games)[1]){
+    cur_game = data.frame(season_games[game,])
+    hp = cur_game$home
+    vp = cur_game$visitor
+    if (played_games$flag[(hp==played_games$Home & vp==played_games$Visitor)]==FALSE){
+      played_games$flag[(hp==played_games$Visitor & vp==played_games$Home)] = TRUE
+      half_season$tier[half_season$home==vp & half_season$visitor==hp] = NA
+    }
+  }
+    half_season = half_season[!is.na(half_season$tier),]
+    for (k in 1:dim(half_season)){
+      g = half_season[k,]
+      if (g$vgoal>g$hgoal){
+        half_points$Points[half_points$team==g$visitor] = half_points$Points[half_points$team==g$visitor]+3
+      }
+      else if (g$vgoal<g$hgoal){
+        half_points$Points[half_points$team==g$home] = half_points$Points[half_points$team==g$visitor]+3
+      }
+      else{
+        half_points$Points[half_points$team==g$home] = half_points$Points[half_points$team==g$visitor]+1
+        half_points$Points[half_points$team==g$visitor] = half_points$Points[half_points$team==g$visitor]+1
+      }
+    }
+    
+  half_points = half_points[order(-half_points$Points),]
+  half_champ = as.character(half_points$team[1])
+  if(season_champ$winner[season_champ$season==All_seasons[this_season]]==half_champ){ans = ans+1}
+}
+  
+print(ans/length(All_seasons))
+
+```
+
+
+## Problem 4
+
+I chose the amount of being a black cat is an identity of how many wins and draws the team has had against each big teams (first 5 in the first question) this amount is wins_against_big_teams+draws_against_big_teams/2
+
+
+```{r , message=FALSE, warning=FALSE}
+
+game_data = filter(spain,(spain$Season>=2001 & spain$Season<=2010))
+teams = unique(game_data$home)
+game_wins = data.frame(expand.grid(winner = teams[!(teams %in% list("Real Madrid", "FC Barcelona", "Valencia CF", "Athletic Bilbao"))],loser = c("Real Madrid", "FC Barcelona", "Valencia CF", "Athletic Bilbao")))
+game_wins$wins_against = rep(0,120)
+game_wins$draws = rep(0,120)
+
+for (i in 1:dim(game_data)[1]){
+  
+  cur_game = game_data[i,]
+  home = cur_game$home
+  visitor = cur_game$visitor
+  if (cur_game$hgoal>cur_game$vgoal){
+    game_wins$wins_against[(game_wins$winner==home & game_wins$loser==visitor)] = game_wins$wins_against[(game_wins$winner==home & game_wins$loser==visitor)] +1 
+  }
+  else if (cur_game$hgoal<cur_game$vgoal){
+    game_wins$wins_against[(game_wins$winner==visitor & game_wins$loser==home)] = game_wins$wins_against[(game_wins$winner==visitor & game_wins$loser==home)] +1 
+  }
+  else if (cur_game$hgoal==cur_game$vgoal){
+    game_wins$draws[(game_wins$winner==visitor & game_wins$loser==home)] = game_wins$draws[(game_wins$winner==visitor & game_wins$loser==home)] +1 
+  }
+}
+
+print(head(game_wins[order(-(game_wins$wins_against+game_wins$draws)),],30))
+## we could get max for each team one by one but I felt better seeing a table of results on this question
+
+
+```
+
+
+Black cat for Athletic Bilbao is Villareal FC with 13 wins and 2 draws
+black cat for Valencia FC is  Racing Santander and Villarreal CF with 9 wins and 2 draws
+Black cat for Real Madrid is Deportivo La Coruna with 8 wins
+Black cat for FC Barcelona is Villareal CF with 6 wins and 4 draws
+
+
+## Problem 5
+
+We need to find the most difference between first and second team in ranking.
+the function, team_rankings_by_time gives us the ranking of teams up until the given date to the function so we just have to check the difference between first and second team at the end of each season
+
+for fastest championship I splitted the Date into its components and sorted the games after each day, the first time a team has a big enough point that no other team can acess it, it's declared champion
+
+```{r , message=FALSE, warning=FALSE}
+
+
+team_rankings_by_time <- function (season=NULL, begin = NULL, end = NULL) 
+{
+  GA <- GF <- ga <- gf <- gd <- GD <- D <- L <- W <- Pts <- . <- Date <- home <- team <- visitor <- hgoal <- opp <- vgoal <- goaldif <- FT <- division <- result <- maxgoal <- mingoal <- absgoaldif <- NULL
+  spainx <- spain[(spain$Season == season), ]
+  spainx <- spainx[(spainx$Date <= end), ]
+  temp <- rbind(dplyr::select(spainx, team = home, opp = visitor, 
+                                GF = hgoal, GA = vgoal), dplyr::select(spainx, team = visitor, 
+                                opp = home, GF = vgoal, GA = hgoal))
+  temp <- temp %>% dplyr::mutate(GD = GF - GA) %>% dplyr::group_by(team) %>% 
+    dplyr::summarise(GP = sum(GD <= 100), W = sum(GD > 0), 
+                     D = sum(GD == 0), L = sum(GD < 0), gf = sum(GF), 
+                     ga = sum(GA), gd = sum(GD)) %>% dplyr::mutate(Pts = (W * 
+                    3) + D) %>% dplyr::arrange(-Pts, -gd, -gf) %>% dplyr::mutate(Pos = rownames(.)) %>% 
+    as.data.frame()
+  return(temp)
+}
+
+max_difference = -1
+max_diff_team = ""
+
+for(this_season in 1:length(All_seasons)){
+
+  games_season = filter(spain,spain$Season==All_seasons[this_season])
+  days_in_season = unique(games_season$Date)
+  days_in_season = sort(days_in_season)
+
+  rank_tbl = team_rankings_by_time(season=All_seasons[this_season],end=days_in_season[length(days_in_season)])
+  first = rank_tbl$Pts[rank_tbl$Pos==1]
+  second = rank_tbl$Pts[rank_tbl$Pos==2]
+  diff = first-second
+  if (diff>max_difference){
+    max_difference = diff
+    max_diff_team = as.character(rank_tbl$team[rank_tbl$Pos==1])
+  }
+
+}
+
+print(max_diff_team)
+print(paste0("difference of points between first and second team:"))
+print(max_difference)
+
+
+season_data = filter(spain,Season==1998)
+
+half_season = season_data %>% group_by(Season) %>% mutate(y = substr(Date,1,4), m = substr(Date,6,7), d = substr(Date,9,10)) %>% select(1, y, m, d, 3:10) %>% arrange(y, m, d)
+games_half = rbind(half_season %>% select(Season, y, m, d, Team=home, opp=visitor, GF=hgoal, GA=vgoal),half_season %>% select(Season, y, m, d, Team=visitor, opp=home, GF=vgoal, GA=hgoal)) %>% mutate (GD=GF-GA) %>% arrange(y, m, d)
+
+games_half = games_half %>% mutate(scr=count_points(GD)) %>% mutate(temp=1) %>%
+  group_by(Season, Team) %>% arrange(y,m,d) %>%
+  mutate(Cumulative_Match = cumsum(temp)) %>%
+  group_by(Season, Team) %>%
+  mutate(all_matches=n(), matches_left=n()-Cumulative_Match)
+
+games_half = games_half %>% mutate(scr=count_points(GD)) %>% mutate(temp=1) %>%
+  group_by(Season, Team) %>% arrange(y,m,d) %>%
+  mutate(Cumulative_Score=cumsum(scr), Cumulative_Match = cumsum(temp)) %>%
+  group_by(Season, Team) %>% mutate(all_matches=n(), matches_left=n()-Cumulative_Match)
+games_half= games_half %>% group_by(Season, matches_left) %>% arrange(-Cumulative_Score) %>%
+  mutate(temp=1, cur_rank=cumsum(temp)) %>% arrange(Season, -matches_left, cur_rank)
+games_half$adj_diff = vector(mode = typeof(1L), length = dim(games_half)[1])
+
+for (i in 1:(dim(games_half)[1]-1))
+{
+  if (games_half$matches_left[i]==games_half$matches_left[i+1]){
+  games_half$adj_diff[i]=games_half$Cumulative_Score[i]-games_half$Cumulative_Score[i+1]}
+  else{games_half$adj_diff[i]=0}
+}
+games_half$adj_diff[dim(games_half)[1]]=0
+
+games_half$adj_diff = as.integer(games_half$adj_diff)
+games_half$cur_rank = as.integer(games_half$cur_rank)
+games_half$matches_left = as.integer(games_half$matches_left)
+
+games_half = games_half %>% filter(cur_rank==1 & adj_diff>(3*matches_left)) %>%
+  mutate(fastness=100*matches_left/all_matches) %>%
+  group_by(Season) %>% arrange(-fastness)%>% slice(1) %>% arrange(-fastness) %>%
+  select(Season, Team, All_Matches=all_matches, Matches_Left=matches_left)
+
+print(head(games_half,1))
+  
+
+
+```
+
+
+
+
+## Problem 6
+
+
+```{r , message=FALSE, warning=FALSE}
+
+lose_strike = data.frame(team = All_Teams, lose=rep(0,length(All_Teams)))
+win_strike = data.frame(team = All_Teams, win=rep(0,length(All_Teams)))
+draw_strike = data.frame(team = All_Teams, draw=rep(0,length(All_Teams)))
+max_lose = max_draw = max_win = -1
+max_lose_team = max_win_team = max_draw_team = ""
+
+timed_games = spain[order(spain$Date),]
+
+for (i in 1:dim(timed_games)[1]){
+  
+   cur_game = timed_games[i,]
+   cur_home = cur_game$home
+   cur_visitor = cur_game$visitor
+      
+   if (cur_game$hgoal>cur_game$vgoal) {
+     
+      win_strike$win[win_strike$team==cur_home] = win_strike$win[win_strike$team==cur_home]+1
+      win_strike$win[win_strike$team==cur_visitor] = 0
+      lose_strike$lose[lose_strike$team==cur_visitor]=lose_strike$lose[lose_strike$team==cur_visitor]+1
+      lose_strike$lose[lose_strike$team==cur_home] = 0
+      draw_strike$draw[draw_strike$team==cur_home] = 0 
+      draw_strike$draw[draw_strike$team==cur_visitor]= 0
+  
+   }
+  
+   if (cur_game$hgoal<cur_game$vgoal) {
+     
+      win_strike$win[win_strike$team==cur_visitor] = win_strike$win[win_strike$team==cur_visitor]+1
+      win_strike$win[win_strike$team==cur_home] = 0
+      lose_strike$lose[lose_strike$team==cur_home]=lose_strike$lose[lose_strike$team==cur_home]+1
+      lose_strike$lose[lose_strike$team==cur_visitor] = 0
+      draw_strike$draw[draw_strike$team==cur_home] = 0 
+      draw_strike$draw[draw_strike$team==cur_visitor]= 0
+      
+   }
+  
+  if (cur_game$hgoal==cur_game$vgoal) {
+     
+      win_strike$win[win_strike$team==cur_visitor] = 0
+      win_strike$win[win_strike$team==cur_home] = 0
+      lose_strike$lose[lose_strike$team==cur_home]= 0
+      lose_strike$lose[lose_strike$team==cur_visitor] = 0
+      draw_strike$draw[draw_strike$team==cur_home] = draw_strike$draw[draw_strike$team==cur_home]+1
+      draw_strike$draw[draw_strike$team==cur_visitor]= draw_strike$draw[draw_strike$team==cur_visitor]+1
+      
+  }
+   
+  if(max_lose<max(lose_strike$lose)){
+    max_lose = max(lose_strike$lose)
+    max_lose_team = as.character(lose_strike$team[lose_strike$lose==max_lose])
+  }
+  if(max_draw<max(draw_strike$draw)){
+    max_draw = max(draw_strike$draw)
+    max_draw_team = as.character(draw_strike$team[draw_strike$draw==max_draw])
+  }
+  if(max_win<max(win_strike$win)){
+    max_win = max(win_strike$win)
+    max_win_team = as.character(win_strike$team[win_strike$win==max_win])
+  }
+
+}
+print(paste0("win:"))
+print(max_win_team)
+print(max_win)
+print(paste0("draw:"))
+print(max_draw_team)
+print(max_draw)
+print(paste0("lose:"))
+print(max_lose_team)
+print(max_lose)
+
+
+
+```
+
+
+## Problem 7
+
+using the function team_rankings_by_time we get table ranking for each season after each day and compute if a team is definitly going down
+fastness of falling is determined by games_left/games_of_season
+
+
+```{r , message=FALSE, warning=FALSE}
+
+max_ratio = 0
+max_team = ""
+
+
+for(this_season in 40:55){
+
+  games_season = filter(spain,spain$Season==All_seasons[this_season])
+  teams_season = unique(games_season$home)
+  team_num = length(teams_season)
+  days_in_season = unique(games_season$Date)
+  days_in_season = sort(days_in_season)
+
+  for (j in 3:length(days_in_season)){
+    cur_day = days_in_season[j]
+    rank_tbl = team_rankings_by_time(season=All_seasons[this_season],end=cur_day)
+    last = rank_tbl$Pts[team_num]
+    not_last = rank_tbl$Pts[team_num-3]
+    if (not_last>3 & !is.null(rank_tbl$GP[team_num]) & team_num>3 & not_last-last>3*(team_num*(team_num-1)-rank_tbl$GP[team_num]))
+      if((team_num*(team_num-1)-(rank_tbl$GP[rank_tbl$Pos==team_num]))/(team_num*(team_num-1))>max_ratio)
+        max_ratio = (team_num*(team_num-1)-rank_tbl$GP[rank_tbl$Pos==team_num])/(team_num)*(team_num-1)
+        max_team = as.character(rank_tbl$team[rank_tbl$Pos==team_num])
+  }
+}
+print(max_team)
+
+```
+
+
+## Problem 8
+
+We sort the data by subsets of Date attribute and find the rank of each team for each week then use this data to draw a chart
+
+```{r , message=FALSE, warning=FALSE}
+
+
+season_1998 = filter(spain,Season==1998)
+
+half_season = season_1998 %>% group_by(Season) %>% mutate(y = substr(Date,1,4), m = substr(Date,6,7), d = substr(Date,9,10)) %>% select(1, y, m, d, 3:10) %>% arrange(y, m, d) 
+
+games_half = rbind(half_season %>% select(Season, y, m, d, Team=home, opp=visitor, GF=hgoal, GA=vgoal),half_season %>% select(Season, y, m, d, Team=visitor, opp=home, GF=vgoal, GA=hgoal)) %>% mutate (GD=GF-GA) %>% arrange(y, m, d)
+
+games_half = games_half %>% mutate(scr=count_points(GD)) %>% mutate(temp=1) %>%
+  group_by(Season, Team) %>% arrange(y,m,d) %>%
+  mutate(Cumulative_GD=cumsum(GD), Cumulative_Score=cumsum(scr), CumMatch = cumsum(temp)) %>%
+  group_by(Season, Team) %>% mutate(all_matches=n(), matches_left=n()-CumMatch)
+
+games_half = games_half %>% group_by(Season, matches_left) %>% arrange(-Cumulative_Score, -Cumulative_GD) %>% mutate(temp=1, cur_rank=cumsum(temp)) %>% arrange(Season, -matches_left, cur_rank)
+
+games_half = games_half %>% arrange(-matches_left, cur_rank)
+
+hchart(games_half, "spline", hcaes(x=38-matches_left, y=cur_rank, group = Team)) %>%
+  hc_yAxis(reversed=TRUE, title = list(text = "team rank")) %>%
+  hc_xAxis(title = list(text = "Week"))
+
+
+
+```
+
+
+## Problem 9 
+
+
+```{r , message=FALSE, warning=FALSE}
+
+game1 = filter(spain, Season == "2012")
+fillframe = as.numeric(reorder(game1$visitor,desc(game1$visitor)))
+fillframe = as.factor(ifelse(fillframe %% 2 == 0, 1, 0))
+
+ggplot(game1, aes(home, reorder(visitor,desc(visitor)), fill = fillframe)) + 
+  geom_tile(color="white", size=1.5, stat="identity", height=1, width=1) + 
+  scale_fill_manual(values = c("white", "lightblue")) +
+  geom_text(data=game1, aes(home, visitor, label = FT), size=rel(3)) +
+  scale_x_discrete(position="top") + scale_y_discrete(expand = c(0, 0)) + 
+  xlab("Home") + ylab("Visitor") +
+  ggtitle("Laliga 2012") +
+  theme(legend.position = "None",
+        axis.text.x = element_text(angle = 90),
+        panel.border = element_rect(fill=NA,color="white", size=0.25, linetype="solid"))
+
+
+```
+
+
+
+
+
+
+## Problem 10
+
+First part of statistic that seems interesting is do teams tend to win the game if they've won the half-time?
+
+```{r , message=FALSE, warning=FALSE}
+
+types = c("win_win", "draw_draw", "lose_lose", "draw_lose", "lose_draw","draw_win", "win_draw", "lose_win", "win_lose")
+
+HT_FT = data.frame(category=unique(types), count=rep(0,9), stringsAsFactors=FALSE)
+spainrm = spain[!(is.na(spain$HT)), ]
+
+for (i in 1:dim(spainrm)[1]){
+  
+  cur_game = spainrm[i,]
+  if (substr(cur_game$HT,1,1)==substr(cur_game$HT,3,3)){
+    if(cur_game$hgoal==cur_game$vgoal){
+      HT_FT$count[HT_FT$category=="draw_draw"] = HT_FT$count[HT_FT$category=="draw_draw"]+1
+    }
+    else if(cur_game$hgoal>cur_game$vgoal){
+      HT_FT$count[HT_FT$category=="draw_win"] = HT_FT$count[HT_FT$category=="draw_win"]+1
+    }
+    else if(cur_game$hgoal<cur_game$vgoal){
+      HT_FT$count[HT_FT$category=="draw_lose"] = HT_FT$count[HT_FT$category=="draw_lose"]+1
+    }
+  }
+  else if (substr(cur_game$HT,1,1)<substr(cur_game$HT,3,3)){
+    if(cur_game$hgoal==cur_game$vgoal){
+      HT_FT$count[HT_FT$category=="lose_draw"] = HT_FT$count[HT_FT$category=="lose_draw"]+1
+    }
+    else if(cur_game$hgoal>cur_game$vgoal){
+      HT_FT$count[HT_FT$category=="lose_win"] = HT_FT$count[HT_FT$category=="lose_win"]+1
+    }
+    else if(cur_game$hgoal<cur_game$vgoal){
+      HT_FT$count[HT_FT$category=="lose_lose"] = HT_FT$count[HT_FT$category=="lose_lose"]+1
+    }
+  }
+  else if (substr(cur_game$HT,1,1)>substr(cur_game$HT,3,3)){
+    if(cur_game$hgoal==cur_game$vgoal){
+      HT_FT$count[HT_FT$category=="win_draw"] = HT_FT$count[HT_FT$category=="win_draw"]+1
+    }
+    else if(cur_game$hgoal>cur_game$vgoal){
+      HT_FT$count[HT_FT$category=="win_win"] = HT_FT$count[HT_FT$category=="win_win"]+1
+    }
+    else if(cur_game$hgoal<cur_game$vgoal){
+      HT_FT$count[HT_FT$category=="win_lose"] = HT_FT$count[HT_FT$category=="win_lose"]+1
+    }
+  }
+}
+
+print(HT_FT)
+
+highchart() %>% 
+  hc_chart(type = "column") %>% 
+  hc_title(text = "half-time vs. full-time") %>% 
+  hc_xAxis(categories = HT_FT$category) %>% 
+  hc_add_series(data = HT_FT$count,
+                name = "games")
+
+```
+Looking over our whole data we see it's more probable that the result of half-time is te same as Full-time except when it's a draw where it's more likely to be a win for home team
+
+
+```{r , message=FALSE, warning=FALSE}
+
+types = c("win_win", "draw_draw", "lose_lose", "draw_lose", "lose_draw","draw_win", "win_draw", "lose_win", "win_lose")
+
+HT_FT = data.frame(category=unique(types), count=rep(0,9), stringsAsFactors=FALSE)
+spainrmrm = filter(spain,spain$home=="Real Madrid")
+spainrmrm = spainrmrm[!(is.na(spainrmrm$HT)), ]
+
+for (i in 1:dim(spainrmrm)[1]){
+  
+  cur_game = spainrmrm[i,]
+  if (substr(cur_game$HT,1,1)==substr(cur_game$HT,3,3)){
+    if(cur_game$hgoal==cur_game$vgoal){
+      HT_FT$count[HT_FT$category=="draw_draw"] = HT_FT$count[HT_FT$category=="draw_draw"]+1
+    }
+    else if(cur_game$hgoal>cur_game$vgoal){
+      HT_FT$count[HT_FT$category=="draw_win"] = HT_FT$count[HT_FT$category=="draw_win"]+1
+    }
+    else if(cur_game$hgoal<cur_game$vgoal){
+      HT_FT$count[HT_FT$category=="draw_lose"] = HT_FT$count[HT_FT$category=="draw_lose"]+1
+    }
+  }
+  else if (substr(cur_game$HT,1,1)<substr(cur_game$HT,3,3)){
+    if(cur_game$hgoal==cur_game$vgoal){
+      HT_FT$count[HT_FT$category=="lose_draw"] = HT_FT$count[HT_FT$category=="lose_draw"]+1
+    }
+    else if(cur_game$hgoal>cur_game$vgoal){
+      HT_FT$count[HT_FT$category=="lose_win"] = HT_FT$count[HT_FT$category=="lose_win"]+1
+    }
+    else if(cur_game$hgoal<cur_game$vgoal){
+      HT_FT$count[HT_FT$category=="lose_lose"] = HT_FT$count[HT_FT$category=="lose_lose"]+1
+    }
+  }
+  else if (substr(cur_game$HT,1,1)>substr(cur_game$HT,3,3)){
+    if(cur_game$hgoal==cur_game$vgoal){
+      HT_FT$count[HT_FT$category=="win_draw"] = HT_FT$count[HT_FT$category=="win_draw"]+1
+    }
+    else if(cur_game$hgoal>cur_game$vgoal){
+      HT_FT$count[HT_FT$category=="win_win"] = HT_FT$count[HT_FT$category=="win_win"]+1
+    }
+    else if(cur_game$hgoal<cur_game$vgoal){
+      HT_FT$count[HT_FT$category=="win_lose"] = HT_FT$count[HT_FT$category=="win_lose"]+1
+    }
+  }
+}
+
+print(HT_FT)
+
+highchart() %>% 
+  hc_chart(type = "column") %>% 
+  hc_title(text = "Real Madrid score of half-time vs. full-time") %>% 
+  hc_xAxis(categories = HT_FT$category) %>% 
+  hc_add_series(data = HT_FT$count,
+                name = "games")
+```
+
+looking at data for real madrid we see the above result in a smaller scale + that real madrid's most results have been wins so the bars that end in win are higher
+
+
+```{r , message=FALSE, warning=FALSE}
+
+types = c("win_win", "draw_draw", "lose_lose", "draw_lose", "lose_draw","draw_win", "win_draw", "lose_win", "win_lose")
+
+HT_FT = data.frame(category=unique(types), count=rep(0,9), stringsAsFactors=FALSE)
+spainrmrm = filter(spain,spain$home=="Racing Santander")
+spainrmrm = spainrmrm[!(is.na(spainrmrm$HT)), ]
+
+for (i in 1:dim(spainrmrm)[1]){
+  
+  cur_game = spainrmrm[i,]
+  if (substr(cur_game$HT,1,1)==substr(cur_game$HT,3,3)){
+    if(cur_game$hgoal==cur_game$vgoal){
+      HT_FT$count[HT_FT$category=="draw_draw"] = HT_FT$count[HT_FT$category=="draw_draw"]+1
+    }
+    else if(cur_game$hgoal>cur_game$vgoal){
+      HT_FT$count[HT_FT$category=="draw_win"] = HT_FT$count[HT_FT$category=="draw_win"]+1
+    }
+    else if(cur_game$hgoal<cur_game$vgoal){
+      HT_FT$count[HT_FT$category=="draw_lose"] = HT_FT$count[HT_FT$category=="draw_lose"]+1
+    }
+  }
+  else if (substr(cur_game$HT,1,1)<substr(cur_game$HT,3,3)){
+    if(cur_game$hgoal==cur_game$vgoal){
+      HT_FT$count[HT_FT$category=="lose_draw"] = HT_FT$count[HT_FT$category=="lose_draw"]+1
+    }
+    else if(cur_game$hgoal>cur_game$vgoal){
+      HT_FT$count[HT_FT$category=="lose_win"] = HT_FT$count[HT_FT$category=="lose_win"]+1
+    }
+    else if(cur_game$hgoal<cur_game$vgoal){
+      HT_FT$count[HT_FT$category=="lose_lose"] = HT_FT$count[HT_FT$category=="lose_lose"]+1
+    }
+  }
+  else if (substr(cur_game$HT,1,1)>substr(cur_game$HT,3,3)){
+    if(cur_game$hgoal==cur_game$vgoal){
+      HT_FT$count[HT_FT$category=="win_draw"] = HT_FT$count[HT_FT$category=="win_draw"]+1
+    }
+    else if(cur_game$hgoal>cur_game$vgoal){
+      HT_FT$count[HT_FT$category=="win_win"] = HT_FT$count[HT_FT$category=="win_win"]+1
+    }
+    else if(cur_game$hgoal<cur_game$vgoal){
+      HT_FT$count[HT_FT$category=="win_lose"] = HT_FT$count[HT_FT$category=="win_lose"]+1
+    }
+  }
+}
+
+print(HT_FT)
+
+highchart() %>% 
+  hc_chart(type = "column") %>% 
+  hc_title(text = "Racing Santander score of half-time vs. full-time") %>% 
+  hc_xAxis(categories = HT_FT$category) %>% 
+  hc_add_series(data = HT_FT$count,
+                name = "games")
+```
+looking at the results for a less famous team we see the same result as before so we can say it's probably a good guess
+
+*********************************************************************************************************
+
+
+how many goals games have had? how many goals should we expect a la liga match to have?
+
+
+```{r , message=FALSE, warning=FALSE}
+
+goal_count = data.frame(goal_num=c(0:15), counter=rep(0,16), stringsAsFactors=FALSE)
+spain_goals = spain
+
+for (i in 1:dim(spain_goals)[1]){
+  
+  cur_game = spain_goals[i,]
+  goal_sum = cur_game$hgoal+cur_game$vgoal
+  goal_count$counter[goal_count$goal_num==goal_sum] = goal_count$counter[goal_count$goal_num==goal_sum]+1
+  
+}
+
+print(goal_count)
+
+highchart() %>% 
+  hc_chart(type = "column") %>% 
+  hc_title(text = "goal count of games in la liga") %>% 
+  hc_xAxis(categories = goal_count$goal_num) %>% 
+  hc_add_series(data = goal_count$counter,
+                name = "games")
+```
+
+We can expect a la liga match to have 2 goals
+
+************************************************************************************
+
+How often Real Madrid and RCD Mallorca (a famous team and a not-so-famous team) have played other teams
+
+```{r , message=FALSE, warning=FALSE}
+
+
+find_opponents <- function (teamname = NULL) 
+{
+  n <- . <- Date <- tier <- home <- team <- visitor <- hgoal <- vgoal <- goaldif <- FT <- Season <- division <- result <- maxgoal <- mingoal <- absgoaldif <- NULL
+  temp <- spain %>% dplyr::filter(home == teamname) %>% dplyr::select(team = visitor)
+  temp1 <- spain %>% dplyr::filter(visitor == teamname) %>% dplyr::select(team = home)
+  temp2 <- rbind(temp, temp1) %>% dplyr::group_by(team) %>% dplyr::tally() %>% dplyr::arrange(-n)
+  return(as.data.frame(unclass(temp2)))
+}
+
+Real_Madrid_opponents = find_opponents("Real Madrid")
+RCD_Mallorca_opponents = find_opponents("RCD Mallorca")
+
+highchart() %>% 
+  hc_chart(type = "pie", data=Real_Madrid_opponents) %>% 
+  hc_add_series_labels_values(labels = Real_Madrid_opponents$team, values = Real_Madrid_opponents$n)%>%
+  hc_tooltip(crosshairs=TRUE, borderWidth=5, sort=TRUE, shared=TRUE, table=TRUE) %>%
+  hc_title(text="Real Madrid games", margin=20, style=list(color="#144746", useHTML=TRUE)) 
+
+highchart() %>% 
+  hc_chart(type = "pie", data=RCD_Mallorca_opponents) %>% 
+  hc_add_series_labels_values(labels = RCD_Mallorca_opponents$team, values = RCD_Mallorca_opponents$n)%>%
+  hc_tooltip(crosshairs=TRUE, borderWidth=5, sort=TRUE, shared=TRUE, table=TRUE) %>%
+  hc_title(text="RCD Mallorca games", margin=20, style=list(color="#144746", useHTML=TRUE)) 
+
+```
+
+two charts look almost the same which shows us the percent of games played between different teams isn't affected by popularity of the team
+p.s. I later realized since this is a league data-set, the percents should have been the same and if they weren't, the data would've been wrong
