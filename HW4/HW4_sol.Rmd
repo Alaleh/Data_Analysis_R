@@ -1,0 +1,306 @@
+---
+title: "Week 4"
+author: "Alaleh Ahmadian"
+date: "March 2, 2018"
+output:
+  prettydoc::html_pretty:
+    theme: tactile
+    highlight: github
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r , message=FALSE, warning=FALSE}
+
+library(readr)
+library(ggplot2)
+library(dplyr)
+library(highcharter)
+library(magrittr)
+
+```
+
+```{r , message=FALSE, warning=FALSE}
+
+bcg = read_rds("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/timss15_grade_8/data/bcg.rds")
+bsa = read_rds("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/timss15_grade_8/data/bsa.rds")
+bsg = read_rds("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/timss15_grade_8/data/bsg.rds")
+bsr = read_rds("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/timss15_grade_8/data/bsr.rds")
+bst = read_rds("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/timss15_grade_8/data/bst.rds")
+btm = read_rds("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/timss15_grade_8/data/btm.rds")
+bts = read_rds("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/timss15_grade_8/data/bts.rds")
+guide = read_rds("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/timss15_grade_8/timss_2015.rds")
+
+```
+
+
+
+##2
+
+Do parents with higher education have more successful children?
+
+Since we don't have any beter measures and we have only the data for a special time test, we used mean of plausible values as a factor of progress and success. Then to classify students by their parents, we took the average of their parents' educational condition (we changed 7s with 0s). Then we made two groups, one filled with students with averge parental educational condition less than median, and one with greater. Then we used two sided t test with null hypothesis the means are equal.
+
+
+```{r , message=FALSE, warning=FALSE}
+
+parents_edu = filter(bsg, bsg[,25]>= 1 & bsg[,25]<=7 & bsg[,26]<=7 & bsg[,26]>=1)
+parents_edu[which(parents_edu$bsbg07a == 7),"bsbg07a"] = 0
+parents_edu[which(parents_edu$bsbg07a == 7),"bsbg07b"] = 0
+parents_edu = mutate(parents_edu, avg = (parents_edu$bsbg07a + parents_edu$bsbg07b))
+y = mutate(bsa, score = rowMeans(bsa[,513:602]))
+edu_data = merge(subset(parents_edu, select = c("avg", "idstud", "idschool", "idclass", "idcntry")), subset(y, select = c("score", "idstud", "idschool", "idclass", "idcntry")))
+med = median(edu_data$avg)
+
+group1 = filter(edu_data, avg > med)
+group2 = filter(edu_data, avg < med | avg == med)
+summary(group2)
+summary(group1)
+samp = sample_n(edu_data,2000)
+ggplot(edu_data, aes(x = avg, y = score)) + geom_point()
+hchart(samp, "scatter", hcaes(x = avg, y = score))
+t.test(group1$score, group2$score, alt = "greater")
+t.test(group1$score, group2$score, alt = "less")
+t.test(group1$score, group2$score, alt = "two.sided")
+
+
+
+```
+the test and p-value show that parents with higher education have more successful kids
+
+## 3
+
+We have some questions about owning tablets and having a separate room in the house, we use those to get an idea of how wealthy a student is and then compare it to his/her grades
+
+
+```{r , message=FALSE, warning=FALSE}
+
+wealthiness = mutate(bsg, knowledge = rowMeans(bsa[,513:602]))
+wealthiness = mutate(wealthiness, wealth = rowSums(wealthiness[,14:24]))
+wealthiness$wealth = wealthiness$wealth-11
+a = subset(wealthiness, select = c("wealth", "knowledge","idstud", "idschool", "idclass", "idcntry"))
+med = median(a$wealth, na.rm = T)
+
+group1 = filter(a, a$wealth > med)
+group2 = filter(a, a$wealth <= med)
+summary(group2)
+summary(group1)
+
+samp = sample_n(a,5000)
+ggplot(a, aes(x = wealth, y = knowledge)) + geom_point()
+hchart(samp,"scatter", hcaes(x = wealth, y = knowledge))
+t.test(group1$wealth, group2$wealth, alt = "greater")
+t.test(group1$wealth, group2$wealth, alt = "less")
+t.test(group1$wealth, group2$wealth, alt = "two.sided")
+
+```
+
+there's no eveidence that being wealthy has an effect on student success
+
+
+## 4
+
+to determine how peaceful a school environment is, we look at answers about cheating, vandalism, profanity, ... on the bcg file then compare the sum to student grades
+
+
+```{r , message=FALSE, warning=FALSE}
+
+peace_data = mutate(bsa, score = rowMeans(bsa[,513:592]))
+peace_d = subset(peace_data, select = c("score", "idstud", "idschool", "idclass", "idcntry"))
+x = filter(bcg, bcbg15a < 5 & bcbg15b < 5 & bcbg15c < 5 & bcbg15d < 5 & bcbg15e < 5 & bcbg15f < 5 & bcbg15g < 5 &bcbg15h < 5 & bcbg15i < 5 & bcbg15j < 5 & bcbg15k<5)
+x = mutate(x, peace = rowSums(x[,57:67]))
+k = subset(x, select = c("idcntry", "idschool", "peace"))
+z = merge(k, peace_d)
+z = na.omit(z)
+med = median(z$peace)
+
+group1 = filter(z, peace > med | peace == med)
+group2 = filter(z, peace < med)
+summary(group2)
+summary(group1)
+samp = sample_n(z,5000)
+ggplot(z,aes(x = peace, y = score)) + geom_point()
+hchart(samp, "scatter", hcaes(x=peace, y=score))
+t.test(group1$score, group2$score, alt = "two.sided")
+
+```
+t test shows that school peacefulness has an effect on how successful the students are.
+
+
+## 6
+
+we start by grouping students into girls and boys, then check the distribution of geometry scores on both groups
+
+```{r , message=FALSE, warning=FALSE}
+
+x = filter(bsg, itsex == 1 | itsex == 2)
+x = mutate(x, geometry = rowMeans(x[,315:319]))
+x = subset(x, select = c("itsex", "geometry"))
+group1 = filter(x, itsex == 1) #girl
+group2 = filter(x, itsex == 2) #boy
+hchart(group1$geometry)
+hchart(group2$geometry)
+#null hypothesis: boys are better in geometry
+summary(group1)
+summary(group2)
+t.test(group2$geometry, group1$geometry, alt = "two.sided")
+t.test(group2$geometry, group1$geometry, alt = "greater")
+
+
+```
+null hypotheses is false and we have evidence towards the other side of the hypotheses meaning girls are better than boys in geometry
+
+
+
+## 7
+
+we grouped the data by how often the student has breakfast and then compared it to his/her score
+
+```{r , message=FALSE, warning=FALSE}
+
+temp = mutate(bsg, knowledge = rowMeans(bsa[,513:602]), food=bsg$bsbg12)
+temp = temp[!(is.na(temp$food)),]
+temp$food = temp$food-1
+a = subset(temp, select = c("knowledge","idstud", "idschool", "idclass", "idcntry", "food"))
+med = median(a$food, na.rm = T)
+
+group1 = filter(a, food > med)
+group2 = filter(a, food < med | food == med)
+summary(group2)
+summary(group1)
+samp = sample_n(a,2000)
+ggplot(a, aes(x = food, y = knowledge)) + geom_point()
+hchart(samp, "scatter", hcaes(x = food, y = knowledge))
+t.test(group1$food, group2$food, alt = "greater")
+t.test(group1$food, group2$food, alt = "less")
+
+```
+small p-value shows students who eat breakfast do better on tests
+
+
+## 9
+
+we chose the columns for class participation and collaboration for each student and then compare it to score on the test
+
+```{r , message=FALSE, warning=FALSE}
+
+participations = mutate(bsg, part = rowSums(bsg[,39:40], na.rm = T))
+participations = mutate(participations, knowledge = rowMeans(bsa[,513:602]))
+a = subset(participations, select = c("part", "knowledge","idstud", "idschool", "idclass", "idcntry"))
+
+med = median(a$part, na.rm = T)
+group1 = filter(a, part > med | part == med)
+group2 = filter(a, part < med)
+summary(group2)
+summary(group1)
+ggplot(a,aes(x = part, y = knowledge)) + geom_point()
+t.test(group1$knowledge, group2$knowledge, alt = "less")
+
+```
+p-value shows nothing since it's not small enough
+
+
+## 10
+
+We separated data for iran from the rest then used mean of math and science reasoning & math and science applied PVs. Then we used t tests
+
+```{r , message=FALSE, warning=FALSE}
+
+x = filter(bsa, idcntry == 364)
+x = mutate(x, reasoning = rowMeans(x[,c(573:577,588:592)]), applied = rowMeans(x[,c(568:572, 583:587)]))
+a = subset(x, select = c("reasoning", "applied", "idstud", "idschool", "idclass", "idcntry"))
+ggplot(a, aes(x = reasoning, y = applied)) + geom_point()
+summary(a$applied)
+summary(a$reasoning)
+t.test(a$applied, a$reasoning, alt = "greater")
+t.test(a$applied, a$reasoning, alt = "two.sided")
+t.test(a$applied, a$reasoning, alt = "less")
+
+
+```
+p-value is too big to prove our hypotheses
+
+
+## Additional test #1
+
+People always say that 
+boys are overall better at applied mathematics than girls, 
+let's check it
+
+```{r , message=FALSE, warning=FALSE}
+
+x = filter(bsa, itsex == 1 | itsex == 2)
+x = mutate(x, applied = rowMeans(x[,c(568:572, 583:587)]))
+x = subset(x, select = c("itsex", "applied"))
+group1 = filter(x, itsex == 1) #girl
+group2 = filter(x, itsex == 2) #boy
+hchart(group1$applied)
+hchart(group2$applied)
+summary(group2)
+summary(group1)
+t.test(group2$applied, group1$applied, alt = "two.sided")
+t.test(group2$applied, group1$applied, alt = "greater")
+
+```
+since the p-value is around e-16 the test shows that boys in 4th grade are better in applied mathematics than girls
+
+
+## Additional test #2
+
+the more homework a student does, the more successful he/she is
+
+
+```{r , message=FALSE, warning=FALSE}
+
+homework_data = mutate(bsg, hw = rowSums(bsg[,266:270], na.rm = T))
+homework_data = mutate(homework_data, knowledge = rowMeans(bsa[,513:602]))
+a = subset(homework_data, select = c("hw", "knowledge","idstud", "idschool", "idclass", "idcntry"))
+
+med = median(a$hw, na.rm = T)
+group1 = filter(a, hw >= med)
+group2 = filter(a, hw < med)
+summary(group2)
+summary(group1)
+samp = sample_n(a,5000)
+ggplot(a,aes(x = hw, y = knowledge)) + geom_point()
+hchart(samp , "scatter" , hcaes(x=hw , y=knowledge))
+t.test(group1$knowledge, group2$knowledge, alt = "two.sided")
+
+```
+
+test and data show no apparent proof that homework and test scores are related
+
+
+## Additional test #3
+
+students who get bullied at school more are less successful 
+
+we have the data for how often each student gets made fun of, left out of games, hurt, forced, ... we want to see if the trauma affects their school work the less the sum of rows 50 to 58 in bsg is, the more traumatized the student is.
+we change the trauma factor to 36-sum to change the order so the more the number of trauma is the more stress the student.
+
+
+```{r , message=FALSE, warning=FALSE}
+
+
+trauma_data = mutate(bsg, trauma = 36-rowSums(bsg[,50:58], na.rm = T))
+trauma_data = mutate(trauma_data, knowledge = rowMeans(bsa[,513:602]))
+a = subset(trauma_data, select = c("trauma", "knowledge","idstud", "idschool", "idclass", "idcntry"))
+
+med = median(a$trauma, na.rm = T)
+group1 = filter(a, trauma >= med)
+group2 = filter(a, trauma < med)
+summary(group2)
+summary(group1)
+samp = sample_n(a,5000)
+ggplot(a,aes(x = trauma, y = knowledge)) + geom_point()
+hchart(samp , "scatter" , hcaes(x=trauma , y=knowledge))
+t.test(group1$knowledge, group2$knowledge, alt = "two.sided")
+
+
+```
+
+
+as we see the more stressed the student is the worse he/she does on the test.
