@@ -1,0 +1,171 @@
+---
+title: "Fifth Week: Bootstrap and Resampling Methods, Nonparametric Hypothesis tests"
+author: "Alaleh Ahmadian"
+date: "March 10, 2018"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r , message=FALSE, warning=FALSE}
+
+library(readr)
+library(ggplot2)
+library(dplyr)
+library(coin)
+
+```
+
+
+## 1
+
+we use The Shapiro-Wilk test which is a test of normality in frequentist statisticst to check if the data follows a normal distribution or not
+
+```{r , message=FALSE, warning=FALSE}
+
+plot_data = data.frame(cbind("num"=c(1:8),"sale"=c(102, 300, 102, 100, 205, 105, 71 , 92)))
+shapiro.test(plot_data$sale)
+ggplot(plot_data, aes(x=reorder(num,sale), y=sale)) + geom_point() + theme_minimal()
+
+
+```
+
+The extremly small p-value shows our null hypothesis is false and that the two stores don't have the same performance
+
+
+
+## 2
+
+we define the function `two_sample_perm_test` to apply permutation test on classical and modern store
+
+```{r , message=FALSE, warning=FALSE}
+
+classical = c(50, 50, 60, 70, 75, 80, 90, 85)
+modern = c(55, 75, 80, 90, 105, 65)
+
+two_sample_perm_test <- function (a, b) 
+{
+    diff.observed = mean(as.numeric(b)) - mean(as.numeric(a))
+    c = c(a, b)
+    num.comb = choose(length(a) + length(b), length(a))
+    number_of_permutations = if (num.comb > 5000) {
+        5000
+    }
+    else {
+        num.comb
+    }
+    diff.random = NULL
+    for (i in 1:number_of_permutations) {
+        a.random = sample(c, length(a), TRUE)
+        b.random = sample(c, length(b), TRUE)
+        diff.random[i] = mean(b.random) - mean(a.random)
+    }
+    pvalue = sum(abs(diff.random) >= abs(diff.observed))/number_of_permutations
+    return(pvalue)
+}
+
+two_sample_perm_test(classical,modern)
+
+```
+
+since the p-value is not small enough we can't reject the null-hypothesis
+
+
+
+## 3
+
+like the last question we use the function we wrote to do a permutation test too see if there's a difference between advertised and unadvertised product
+
+```{r , message=FALSE, warning=FALSE}
+
+unadvertised = c(509, 517, 502, 629, 830, 911, 847, 803, 727, 853, 757, 730, 774, 718, 904)
+advertised = c(517, 508, 523, 730, 821, 940, 818, 821, 842, 842, 709, 688, 787, 780, 901)
+two_sample_perm_test(unadvertised,advertised)
+
+
+```
+
+since the p-value is not small enough we can't reject the null-hypothesis
+
+
+
+## 4
+
+since we have 3 sets of data we use kruskal-wallis H test by rank (aka. one-way ANOVA), It's a non-parametric method for testing whether samples originate from the same distribution. A significant Kruskal-Wallis test indicates that at least one sample stochastically dominates one other sample. The test does not identify where this stochastic dominance occurs or for how many pairs of groups stochastic dominance obtains.
+
+```{r , message=FALSE, warning=FALSE}
+
+Store_data = data.frame("Counts" = c(510,720,930,754,105,925,735,753,685,730,745,875,610), "Colors"=c("White","White","White","White","White","Blue","Blue","Blue","Blue","Red","Red","Red","Red"))
+kruskal_test(Counts~Colors, data=Store_data)
+
+
+```
+p-value is not small enough to reject the null hypothesis
+
+
+## 5
+
+The Friedman test is a non-parametric statistical test. Similar to the parametric repeated measures ANOVA, it is used to detect differences in treatments across multiple test attempts. The procedure involves ranking each row (or block) together, then considering the values of ranks by columns.
+
+```{r , message=FALSE, warning=FALSE}
+
+tv_data = data.frame(read_csv("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/HomeWorks/hw_05/data/tv.csv"))
+friedman.test(as.matrix(tv_data))
+
+
+```
+p-value is not small enough to indicate we should reject the null hypothesis.
+
+
+
+## 6
+
+The Chi-Square test of independence is used to determine if there is a significant relationship between two nominal (categorical) variables.  The frequency of each category for one nominal variable is compared across the categories of the second nominal
+
+```{r , message=FALSE, warning=FALSE}
+
+populatin_service = cbind(c(151, 802, 753), c(252,603,55), c(603,405,408))
+populatin_service <- as.table(as.matrix(populatin_service))
+chisq.test(populatin_service)
+
+
+```
+The p-value is too small so it indicates that we can reject the null hypotheses and city population might have an effect on buying of the product
+
+
+
+## 7
+
+We use Spearman's rank correlation coefficient or Spearman's rho, which is a nonparametric measure of rank correlation (statistical dependence between the rankings of two variables). It assesses how well the relationship between two variables can be described using a monotonic function.
+
+```{r , message=FALSE, warning=FALSE}
+
+consumption_data = read_csv("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/HomeWorks/hw_05/data/consumption.csv")
+cor.test(consumption_data$A, consumption_data$B,
+         alternative = c("two.sided", "less", "greater"),method = c("spearman"),
+         exact = NULL, conf.level = 0.95)
+
+```
+The Spearman correlation coefficient, rho, can take values from +1 to -1. A rho of +1 indicates a perfect association of ranks, a rho of zero indicates no association between ranks and a rho of -1 indicates a perfect negative association of ranks. The closer rho is to zero, the weaker the association between the ranks.
+so since rho is very close to 0 there's almost no association between given data
+
+
+
+## 8
+
+we do just as we did with problem 6
+
+```{r , message=FALSE, warning=FALSE}
+
+company_data = as.matrix(cbind("Male"=c(301,353,558), "Female"=c(502,155,153)))
+chisq.test(company_data)
+
+
+```
+
+small p-value indicates that we can reject null-hypothesis and there is a difference bwtween men and women
