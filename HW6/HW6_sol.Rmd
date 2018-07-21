@@ -1,0 +1,252 @@
+---
+title: 'Sixth Week: Linear Models - House price prediction'
+author: "Alaleh Ahmadian Shalchi"
+date: "April 9, 2018"
+output:
+  prettydoc::html_pretty:
+    highlight: github
+    theme: HPSTR
+  rmarkdown::html_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+
+## Libraries:
+
+```{r , message=FALSE, warning=FALSE}
+
+library(readr)
+library(readxl)
+library(ggplot2)
+library(dplyr)
+library(highcharter)
+library(boot)
+library(magrittr)
+library(knitr)
+library(car)
+library(corrplot)
+library(RColorBrewer)
+library(highcharter)
+library(hexbin)
+library(ggplot2)
+library(party)
+library(randomForest)
+library(gridExtra)
+library(reshape2)
+library(Hmisc)
+library(GGally)
+library(corpcor)
+library(mctest)
+
+
+```
+
+
+## Data:
+
+```{r , message=FALSE, warning=FALSE}
+
+Neighborhood = read.csv("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/Data/house/Neighborhood_details.csv")
+d_variables = read.csv("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/Data/house/dictionnaire_variables.csv")
+d_niveaux = read.csv("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/Data/house/dictionnaire_niveaux.csv")
+test = read.csv("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/Data/house/test.csv")
+test_set_complete = read.csv("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/Data/house/test_set_complete.csv")
+train = read.csv("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/Data/house/train.csv")
+
+```
+
+
+
+## 1
+
+We choose numerical data draw a correlation plot and mixed correlatlation plot then get the matrix of pairwaise correlations then we sort them and choose the most correlated columns with Sale price of houses
+
+```{r , message=FALSE, warning=FALSE}
+
+houses_data_frame = data.frame(train)[,-1]
+numerical_houses_df = houses_data_frame  %>% select_if(is.numeric)
+numerical_houses_matrix = data.matrix(numerical_houses_df)
+houses_matrix = data.matrix(houses_data_frame)
+
+correlated = cor(houses_matrix)
+num_corred = cor(numerical_houses_matrix)
+corrplot(num_corred, method='shade', col = brewer.pal(n = 8, "PuOr"), bg = "lightblue", is.na=FALSE)
+corrplot.mixed(num_corred)
+corrplot(correlated, method='shade', col = brewer.pal(n = 8, "PuOr"), bg = "lightblue", is.na=FALSE)
+corrplot.mixed(correlated)
+
+kable(correlated)
+
+correlations_with_price <- arrange(melt(correlated), -abs(value))
+correlations_with_price = correlations_with_price[correlations_with_price$Var2 == "SalePrice",]
+correlations_with_price = filter(correlations_with_price, value!=1)
+tops = correlations_with_price[1:12,]
+correlations_with_price
+tops
+
+
+```
+
+
+## 2
+
+we use the most correlated columns with SalePrice, that we found in the first question to get a good fit.
+
+```{r , message=FALSE, warning=FALSE}
+
+top10 = subset(houses_data_frame,select=c("OverallQual", "GrLivArea", "GarageCars", "ExterQual", "GarageArea", "TotalBsmtSF", "X1stFlrSF", "KitchenQual", "FullBath", "TotRmsAbvGrd", "SalePrice"))
+ggpairs(top10)
+pairs(top10)
+cor2pcor(cov(data.matrix(top10)))
+omcdiag(data.matrix(top10),houses_data_frame$SalePrice )
+
+bin<-hexbin(top10$OverallQual, top10$SalePrice, xbins=30) 
+plot(bin, main="Hexagonal Binning")
+
+scatterplotMatrix(top10,spread=FALSE, smoother.args=list(lty=2),main="Scatter Plot Matrix")
+
+```
+
+## 3
+
+we use the most correlated columns with SalePrice, that we found in the first question to get a good fit.
+
+```{r , message=FALSE, warning=FALSE}
+
+fit = lm(SalePrice ~ OverallQual + OverallCond + GrLivArea + GarageCars + GarageArea + TotalBsmtSF + X1stFlrSF + KitchenQual + FullBath + YearBuilt, data=houses_data_frame)
+summary(fit)
+
+```
+
+
+## 4
+
+```{r , message=FALSE, warning=FALSE}
+
+plot(houses_data_frame$SalePrice ~ predict(fit)) + abline(a=0, b=1)
+highchart() %>% hc_add_series_scatter(x=houses_data_frame$SalePrice, y=fitted(fit))
+
+```
+Cosnsidering the plots match x=y line pretty well, this is a logical prediction
+
+
+
+## 5
+
+F-statistic is a good indicator of whether there is a relationship between our predictor and the response variables. It is telling us whether the regression as a whole is performing 'better than random' - any set of random predictors will have some relationship with the response, so it's seeing whether your model fits better than you'd expect if all your predictors had no relationship with the response (beyond what would be explained by that randomness). This is used for a test of whether the model outperforms 'noise' as a predictor. The p-value in the last row is the p-value for that test, essentially comparing the full model you fitted with an intercept-only model.
+our p-value for f-statistic is very small so we have a good model
+
+```{r , message=FALSE, warning=FALSE}
+
+summary(fit)$r.squared
+summary(fit)$adj.r.squared
+
+```
+
+## 6
+
+```{r , message=FALSE, warning=FALSE}
+
+#list(correlations_with_price$Var1)
+
+fit2 = lm(SalePrice ~ LotFrontage + LotArea + Street + LotShape + LandContour + LotConfig + Neighborhood +  BldgType + HouseStyle + OverallQual + OverallCond + YearBuilt + YearRemodAdd + RoofMatl + MasVnrType + MasVnrArea + ExterQual + BsmtQual  + BsmtExposure + BsmtFinType1 + BsmtFinSF1 + BsmtFinType2 + BsmtFinSF2 + BsmtUnfSF + TotalBsmtSF + CentralAir + X1stFlrSF + X2ndFlrSF + LowQualFinSF + GrLivArea + BsmtFullBath + BsmtHalfBath + FullBath + HalfBath + BedroomAbvGr + KitchenAbvGr + KitchenQual + TotRmsAbvGrd + Fireplaces + FireplaceQu + GarageType + GarageYrBlt + GarageFinish + GarageCars + GarageArea + GarageCond + PavedDrive + + WoodDeckSF + OpenPorchSF + EnclosedPorch + X3SsnPorch + ScreenPorch + PoolArea + MiscVal + MoSold + YrSold , data = houses_data_frame)
+#summary(fit2)
+
+better_fit2 = lm(SalePrice ~  LotArea + Street + Neighborhood +  BldgType + OverallQual + OverallCond + YearBuilt + YearRemodAdd + RoofMatl + MasVnrType + MasVnrArea + ExterQual + BsmtQual  + BsmtExposure + BsmtFinSF1 + BsmtFinSF2 + BsmtUnfSF + X1stFlrSF + X2ndFlrSF + GrLivArea + KitchenAbvGr + KitchenQual + TotRmsAbvGrd + GarageCars + ScreenPorch + PoolArea, data = houses_data_frame)
+summary(better_fit2)
+
+
+```
+
+
+## 7
+
+The plot of residuals versus predicted values is useful for checking the assumption of linearity and homoscedasticity. If the model does not meet the linear model assumption, we would expect to see residuals that are very large (big positive value or big negative value). To assess the assumption of linearity we want to ensure that the residuals are not too far away from 0 (standardized values less than -2 or greater than 2 are deemed problematic). To assess if the homoscedasticity assumption is met we look to make sure that there is no pattern in the residuals and that they are equally spread around the y = 0 line.
+The tests and intervals estimated in summary(fit) are based on the assumption of normality. The normality assumption is evaluated based on the residuals and can be evaluated using a QQ-plot (plot 2) by comparing the residuals to "ideal" normal observations. Observations lie quite well along a line in the QQ-plot, so we may say that normality assumptions is acceptable.
+The assumption of a random sample and independent observations cannot be tested with diagnostic plots. It is an assumption that you can test by examining the study design. Here we use durbin-Watson Test for this. As the p-value is not very low, we can't say that the data are not independent! Because our null hypothesis (H0) is that there is no correlation among residuals, i.e., they may not be independent and is not rejected.
+a scale-location plot (square rooted standardized residual vs. predicted value). This is useful for checking the assumption of homoscedasticity. In this particular plot we are checking to see if there is a pattern in the residuals. And there isnt so our assumption is true.
+"Cook's distance", which is a measure of the influence of each observation on the regression coefficients. The Cook's distance statistic is a measure, for each observation in turn, of the extent of change in model estimates when that particular observation is omitted. Any observation for which the Cook's distance is close to 1 or more, or that is substantially larger than other Cook's distances (highly influential data points), requires investigation.
+
+
+
+
+```{r , message=FALSE, warning=FALSE}
+
+layout(matrix(c(1,2,3,4),2,2)) # optional 4 graphs/page 
+durbinWatsonTest(fit2)
+plot(residuals(fit2))
+plot(fit2)
+
+```
+
+
+## 8
+
+cross validation in its basic version, the so called kk-fold cross-validation, the samples are randomly partitioned into kk sets (called folds) of roughly equal size. A model is fit using all the samples except the first subset. Then, the prediction error of the fitted model is calculated using the first held-out samples. The same operation is repeated for each fold and the model's performance is calculated by averaging the errors across the different test sets. kk is usually fixed at 5 or 10 . Cross-validation provides an estimate of the test error for each model6. Cross-validation is one of the most widely-used method for model selection, and for choosing tuning parameter values. If the model is correctly specified, it can be shown under mild assumptions that the expected value of the MSE for the training set is a fraction of the expected value of the MSE for the validation set
+
+```{r , message=FALSE, warning=FALSE}
+
+best_mse = Inf
+t = 1000
+while(TRUE) {
+  
+  len <- dim(houses_data_frame)[1]
+  train_inds <- sample(1:len, size=floor(len * 0.8))
+  train_sample <- houses_data_frame[train_inds, ]
+  test_sample <- houses_data_frame[-train_inds, ]
+  
+  fit3 = lm(SalePrice ~  LotArea + Street +  BldgType + OverallQual + OverallCond + YearBuilt + YearRemodAdd + MasVnrType + MasVnrArea + ExterQual + BsmtQual  + BsmtExposure + BsmtFinSF1 + BsmtFinSF2 + BsmtUnfSF + X1stFlrSF + X2ndFlrSF + GrLivArea + KitchenAbvGr + KitchenQual + TotRmsAbvGrd + GarageCars + ScreenPorch + PoolArea, data=train_sample)
+  temp <- predict(fit3, test_sample)
+  next_mse = summary(fit3)$r.squared
+  
+  if(best_mse > next_mse) {
+    best_fit = fit3
+    best_mse <- next_mse
+    t = 100
+  } else {
+    t = t - 1
+    if(t == 0) {
+      break
+    }
+  }
+}
+
+summary(best_fit)
+best_mse
+
+```
+
+
+
+## 9
+
+```{r , message=FALSE, warning=FALSE}
+
+
+fit5 = lm(SalePrice ~ LotArea^5 + OverallQual^7 + OverallCond^2 + YearBuilt + RoofMatl^2  + BsmtFinSF1  + GrLivArea + KitchenAbvGr + KitchenQual^3 , data = houses_data_frame)
+summary(fit5)
+temp2 <- predict(fit5, test)
+#temp2
+
+```
+
+
+## 10
+
+```{r , message=FALSE, warning=FALSE}
+
+answer = data.frame("Id"=test$Id, "SalePrice"=predict(fit5, test))
+write.csv(answer[c("Id","SalePrice")], file = "ans93103703.csv", row.names = FALSE)
+
+```
+
+<div align="center">
+<img  src="/Users/Alaleh/Desktop/Term8/Data_Analysis/HW_sol/kaggle_house_93103703.png">
+</div>
