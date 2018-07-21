@@ -1,0 +1,538 @@
+---
+title: 'Seventh Week: Generalized Linear Models (Murder or suicide)'
+author: "Alaleh Ahmadian"
+date: "April 25, 2018"
+output:
+  prettydoc::html_pretty:
+    highlight: github
+    theme: HPSTR
+  rmarkdown::html_document: default
+  html_document:
+    df_print: paged
+---
+
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+
+## Libraries:
+
+```{r , message=FALSE, warning=FALSE}
+
+library(readr)
+library(readxl)
+library(dplyr)
+library(highcharter)
+library(boot)
+library(ggthemes)
+library(magrittr)
+library(knitr)
+library(car)
+library(corrplot)
+library(RColorBrewer)
+library(highcharter)
+library(hexbin)
+library(party)
+library(randomForest)
+library(gridExtra)
+library(reshape2)
+library(ggplot2)
+library(Hmisc)
+library(GGally)
+library(corpcor)
+library(mctest)
+library(caTools)
+library(ROCR)
+library(caret)
+library(ROCR)
+library(grid)
+library(caret)
+library(dplyr)
+library(scales)
+library(ggplot2)
+library(data.table)
+library(vcd)
+library(h2o)
+
+```
+
+
+
+## Useful Functions
+
+From https://github.com/ethen8181/machine-learning/blob/master/unbalanced/unbalanced_code/unbalanced_functions.R
+
+```{r , message=FALSE, warning=FALSE}
+# ------------------------------------------------------------------------------------------
+# [AccuracyCutoffInfo] : 
+# Obtain the accuracy on the trainining and testing dataset.
+# for cutoff value ranging from .4 to .8 ( with a .05 increase )
+# @train   : your data.table or data.frame type training data ( assumes you have the predicted score in it ).
+# @test    : your data.table or data.frame type testing data
+# @predict : prediction's column name (assumes the same for training and testing set)
+# @actual  : actual results' column name
+# returns  : 1. data : a data.table with three columns.
+#            		   each row indicates the cutoff value and the accuracy for the 
+#            		   train and test set respectively.
+# 			 2. plot : plot that visualizes the data.table
+
+AccuracyCutoffInfo <- function( train, test, predict, actual )
+{
+  # change the cutoff value's range as you please 
+  cutoff <- seq( .4, .8, by = .05 )
+  
+  accuracy <- lapply( cutoff, function(c)
+  {
+    # use the confusionMatrix from the caret package
+    cm_train <- confusionMatrix( as.numeric( train[[predict]] > c ), train[[actual]] )
+    cm_test  <- confusionMatrix( as.numeric( test[[predict]]  > c ), test[[actual]]  )
+    
+    dt <- data.table( cutoff = c,
+                      train  = cm_train$overall[["Accuracy"]],
+                      test   = cm_test$overall[["Accuracy"]] )
+    return(dt)
+  }) %>% rbindlist()
+  
+  # visualize the accuracy of the train and test set for different cutoff value 
+  # accuracy in percentage.
+  accuracy_long <- gather( accuracy, "data", "accuracy", -1 )
+  
+  plot <- ggplot( accuracy_long, aes( cutoff, accuracy, group = data, color = data ) ) + 
+    geom_line( size = 1 ) + geom_point( size = 3 ) +
+    scale_y_continuous( label = percent ) +
+    ggtitle( "Train/Test Accuracy for Different Cutoff" )
+  
+  return( list( data = accuracy, plot = plot ) )
+}
+
+
+# ------------------------------------------------------------------------------------------
+# [ConfusionMatrixInfo] : 
+# Obtain the confusion matrix plot and data.table for a given
+# dataset that already consists the predicted score and actual outcome.
+# @data    : your data.table or data.frame type data that consists the column
+#            of the predicted score and actual outcome 
+# @predict : predicted score's column name
+# @actual  : actual results' column name
+# @cutoff  : cutoff value for the prediction score 
+# return   : 1. data : a data.table consisting of three column
+#            		   the first two stores the original value of the prediction and actual outcome from
+#			 		   the passed in data frame, the third indicates the type, which is after choosing the 
+#			 		   cutoff value, will this row be a true/false positive/ negative 
+#            2. plot : plot that visualizes the data.table 
+
+ConfusionMatrixInfo <- function( data, predict, actual, cutoff )
+{	
+  # extract the column ;
+  # relevel making 1 appears on the more commonly seen position in 
+  # a two by two confusion matrix	
+  predict <- data[[predict]]
+  actual  <- relevel( as.factor( data[[actual]] ), "1" )
+  
+  result <- data.table( actual = actual, predict = predict )
+  
+  # caculating each pred falls into which category for the confusion matrix
+  result[ , type := ifelse( predict >= cutoff & actual == 1, "TP",
+                            ifelse( predict >= cutoff & actual == 0, "FP", 
+                                    ifelse( predict <  cutoff & actual == 1, "FN", "TN" ) ) ) %>% as.factor() ]
+  
+  # jittering : can spread the points along the x axis 
+  plot <- ggplot( result, aes( actual, predict, color = type ) ) + 
+    geom_violin( fill = "white", color = NA ) +
+    geom_jitter( shape = 1 ) + 
+    geom_hline( yintercept = cutoff, color = "blue", alpha = 0.6 ) + 
+    scale_y_continuous( limits = c( 0, 1 ) ) + 
+    scale_color_discrete( breaks = c( "TP", "FN", "FP", "TN" ) ) + # ordering of the legend 
+    guides( col = guide_legend( nrow = 2 ) ) + # adjust the legend to have two rows  
+    ggtitle( sprintf( "Confusion Matrix with Cutoff at %.2f", cutoff ) )
+  
+  return( list( data = result, plot = plot ) )
+}
+
+
+# ------------------------------------------------------------------------------------------
+# [ROCInfo] : 
+# Pass in the data that already consists the predicted score and actual outcome.
+# to obtain the ROC curve 
+# @data    : your data.table or data.frame type data that consists the column
+#            of the predicted score and actual outcome
+# @predict : predicted score's column name
+# @actual  : actual results' column name
+# @cost.fp : associated cost for a false positive 
+# @cost.fn : associated cost for a false negative 
+# return   : a list containing  
+#			 1. plot        : a side by side roc and cost plot, title showing optimal cutoff value
+# 				 	   		  title showing optimal cutoff, total cost, and area under the curve (auc)
+# 		     2. cutoff      : optimal cutoff value according to the specified fp/fn cost 
+#		     3. totalcost   : total cost according to the specified fp/fn cost
+#			 4. auc 		: area under the curve
+#		     5. sensitivity : TP / (TP + FN)
+#		     6. specificity : TN / (FP + TN)
+
+ROCInfo <- function( data, predict, actual, cost.fp, cost.fn )
+{
+  # calculate the values using the ROCR library
+  # true positive, false postive 
+  pred <- prediction( data[[predict]], data[[actual]] )
+  perf <- performance( pred, "tpr", "fpr" )
+  roc_dt <- data.frame( fpr = perf@x.values[[1]], tpr = perf@y.values[[1]] )
+  
+  # cost with the specified false positive and false negative cost 
+  # false postive rate * number of negative instances * false positive cost + 
+  # false negative rate * number of positive instances * false negative cost
+  cost <- perf@x.values[[1]] * cost.fp * sum( data[[actual]] == 0 ) + 
+    ( 1 - perf@y.values[[1]] ) * cost.fn * sum( data[[actual]] == 1 )
+  
+  cost_dt <- data.frame( cutoff = pred@cutoffs[[1]], cost = cost )
+  
+  # optimal cutoff value, and the corresponding true positive and false positive rate
+  best_index  <- which.min(cost)
+  best_cost   <- cost_dt[ best_index, "cost" ]
+  best_tpr    <- roc_dt[ best_index, "tpr" ]
+  best_fpr    <- roc_dt[ best_index, "fpr" ]
+  best_cutoff <- pred@cutoffs[[1]][ best_index ]
+  
+  # area under the curve
+  auc <- performance( pred, "auc" )@y.values[[1]]
+  
+  # normalize the cost to assign colors to 1
+  normalize <- function(v) ( v - min(v) ) / diff( range(v) )
+  
+  # create color from a palette to assign to the 100 generated threshold between 0 ~ 1
+  # then normalize each cost and assign colors to it, the higher the blacker
+  # don't times it by 100, there will be 0 in the vector
+  col_ramp <- colorRampPalette( c( "green", "orange", "red", "black" ) )(100)   
+  col_by_cost <- col_ramp[ ceiling( normalize(cost) * 99 ) + 1 ]
+  
+  roc_plot <- ggplot( roc_dt, aes( fpr, tpr ) ) + 
+    geom_line( color = rgb( 0, 0, 1, alpha = 0.3 ) ) +
+    geom_point( color = col_by_cost, size = 4, alpha = 0.2 ) + 
+    geom_segment( aes( x = 0, y = 0, xend = 1, yend = 1 ), alpha = 0.8, color = "royalblue" ) + 
+    labs( title = "ROC", x = "False Postive Rate", y = "True Positive Rate" ) +
+    geom_hline( yintercept = best_tpr, alpha = 0.8, linetype = "dashed", color = "steelblue4" ) +
+    geom_vline( xintercept = best_fpr, alpha = 0.8, linetype = "dashed", color = "steelblue4" )				
+  
+  cost_plot <- ggplot( cost_dt, aes( cutoff, cost ) ) +
+    geom_line( color = "blue", alpha = 0.5 ) +
+    geom_point( color = col_by_cost, size = 4, alpha = 0.5 ) +
+    ggtitle( "Cost" ) +
+    scale_y_continuous( labels = comma ) +
+    geom_vline( xintercept = best_cutoff, alpha = 0.8, linetype = "dashed", color = "steelblue4" )	
+  
+  # the main title for the two arranged plot
+  sub_title <- sprintf( "Cutoff at %.2f - Total Cost = %d, AUC = %.3f", 
+                        best_cutoff, best_cost, auc )
+  
+  # arranged into a side by side plot
+  plot <- arrangeGrob( roc_plot, cost_plot, ncol = 2, 
+                       top = textGrob( sub_title, gp = gpar( fontsize = 16, fontface = "bold" ) ) )
+  
+  return( list( plot 		  = plot, 
+                cutoff 	  = best_cutoff, 
+                totalcost   = best_cost, 
+                auc         = auc,
+                sensitivity = best_tpr, 
+                specificity = 1 - best_fpr ) )
+}
+
+```
+
+
+
+
+## Data:
+
+```{r , message=FALSE, warning=FALSE}
+
+MSData = read.csv("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/Data/murder_suicide/murder_suicide.csv")
+
+```
+
+
+
+## 1
+
+to get unique data we exclude the rows which represent the same values with different encodings.
+Also we change MannerOfDeathRow from values of 2,3 to 0,1 for better understanding and working with data.
+because all of our data is categorical we should use chi-squared test and to get a better understanding of the correlations we use cramers for each two columns
+
+```{r , message=FALSE, warning=FALSE}
+
+#names(MSData)
+MSData %>% filter(EducationReportingFlag==1) %>% select(c(2,4,6,7,9,15,16,17,19,21,22,23,24,26,32,38,20)) -> UniqueMSD
+
+UniqueMSD[which(UniqueMSD$Age == max(UniqueMSD$Age)),'Age'] = 104
+UniqueMSD$MannerOfDeath = UniqueMSD$MannerOfDeath - 2
+
+UniqueMSD = data.frame(UniqueMSD)
+UniqueMSD_matrix = data.matrix(UniqueMSD)
+
+par(xpd=TRUE)
+correlated = cor(UniqueMSD_matrix)
+kable(correlated)
+corrplot(correlated, method='shade', col = brewer.pal(n = 8, "PuOr"), bg = "lightblue",tl.cex=.5, tl.srt=120, is.na=FALSE, mar = c(2, 0, 1, 0))
+corrplot.mixed(correlated,  bg = "lightblue",tl.cex=.2, tl.srt=100, is.na=FALSE, mar = c(2, 0, 1, 0))
+
+for (i in 1:17) {
+  for (j in 1:17) {
+    chisq.test(UniqueMSD[,i], UniqueMSD[,j])$p.value
+    y = table(UniqueMSD[, i], UniqueMSD[, j])
+    y
+    assocstats(y)$cramer
+  }
+}
+
+tmp = UniqueMSD[sample(1:dim(UniqueMSD)[1], 3000), ]
+scatterplotMatrix(tmp)
+scatterplotMatrix(tmp[1:9,1:9])
+scatterplotMatrix(tmp[1:9,10:17])
+scatterplotMatrix(tmp[10:17,1:9])
+scatterplotMatrix(tmp[10:17,10:17])
+
+```
+
+
+
+
+## 2
+
+```{r , message=FALSE, warning=FALSE}
+
+cur_data = UniqueMSD
+
+cur_data[which(cur_data$Age == max(cur_data$Age)),'Age'] = 104 
+ggplot(data = cur_data, aes(Age, fill = MannerOfDeath)) + geom_histogram(binwidth = 4,aes(fill = as.factor(MannerOfDeath)), position = "dodge")
+cur_data$Age = as.character(cur_data$Age)
+fit1 = aov(MannerOfDeath ~ Age, cur_data)
+summary(fit1)
+t_age = table(cur_data$MannerOfDeath, cur_data$Age)
+vcd::assocstats(t_age)$cramer
+
+
+cur_data$Sex = as.numeric(cur_data$Sex)
+ggplot(data = cur_data, aes(Sex, fill = MannerOfDeath)) + geom_bar(aes(fill = as.factor(MannerOfDeath)), position = "dodge")
+t.test(cur_data$MannerOfDeath ~ cur_data$Sex, alt = "two.sided")
+t_sex = table(cur_data$MannerOfDeath, cur_data$Sex)
+vcd::assocstats(t_sex)$cramer
+
+
+ggplot(data = cur_data, aes(Education2003Revision, fill = MannerOfDeath)) + geom_bar(aes(fill = as.factor(MannerOfDeath)), position = "dodge")
+cur_data$Education2003Revision = as.character(cur_data$Education2003Revision)
+fit2 = aov(MannerOfDeath ~ Education2003Revision, cur_data)
+summary(fit2)
+t_edu = table(cur_data$MannerOfDeath, cur_data$Education2003Revision)
+vcd::assocstats(t_edu)$cramer
+
+cur_data[which(cur_data$Race == 18),'Race'] = 8
+cur_data[which(cur_data$Race == 28),'Race'] = 9
+cur_data[which(cur_data$Race == 38),'Race'] = 10
+cur_data[which(cur_data$Race == 48),'Race'] = 11
+cur_data[which(cur_data$Race == 58),'Race'] = 12
+cur_data[which(cur_data$Race == 68),'Race'] = 13
+cur_data[which(cur_data$Race == 78),'Race'] = 14
+ggplot(data = cur_data, aes(Race, fill = MannerOfDeath)) + geom_bar(aes(fill = as.factor(MannerOfDeath)), position = "dodge")
+cur_data$Race = as.character(cur_data$Race)
+fit3 = aov(MannerOfDeath ~ Race, cur_data)
+summary(fit3)
+t_race = table(cur_data$MannerOfDeath, cur_data$Race)
+vcd::assocstats(t_race)$cramer
+
+
+ggplot(data = cur_data, aes(MethodOfDisposition, fill = MannerOfDeath)) + geom_bar(aes(fill = as.factor(MannerOfDeath)), position = "dodge")
+cur_data$MethodOfDisposition = as.character(cur_data$MethodOfDisposition)
+fit4 = aov(MannerOfDeath ~ MethodOfDisposition, cur_data)
+summary(fit4)
+t_disp = table(cur_data$MannerOfDeath, cur_data$MethodOfDisposition)
+vcd::assocstats(t_disp)$cramer
+
+
+
+```
+
+
+Age: We see that suicide is not uniformely spread consequently suicide happens much more than homicide. And people around ages 40 to 50 are more likely to commit suicide.
+
+Sex: By looking at t-test results, we see that suicide rate is more in men, actually both types of death are more among men. So a man is more likely to commit suicide.
+
+Education: We see that people with lower education are more likely. Specially people with some college credit but no degree.
+
+Race: We see that overall white people are way more likely to commit suicide.
+
+MethodOfDisposition: we see that most people who have commited suicide have been cremated
+
+
+## 3
+
+We start by using all columns of data and keep removing the ones with less effect on the regression line (high p-values)
+
+```{r , message=FALSE, warning=FALSE}
+
+model = glm(MannerOfDeath ~ .-DayOfWeekOfDeath -ResidentStatus -MonthOfDeath - Race - MethodOfDisposition, data=UniqueMSD, family="binomial")
+summary(model)
+
+KindOfDeath =  mutate(UniqueMSD, pred = fitted(model)) 
+
+ggplot(KindOfDeath,aes(x = Sex,y = pred,col = MannerOfDeath))+
+  geom_point()
+popbio::logi.hist.plot(KindOfDeath$pred, KindOfDeath$MannerOfDeath,boxp=FALSE,type="hist",col="gray")
+
+glm.diag.plots(model, glmdiag = glm.diag(model))
+
+
+```
+
+
+
+
+## 4
+
+
+```{r , message=FALSE, warning=FALSE}
+
+ggplot(data=KindOfDeath, aes(pred, color=as.factor(MannerOfDeath))) + geom_density(size=1) + scale_color_economist(name = "Kind Of Death", labels = c( "0 (Suicide)", "1 (Murder)")) + theme_economist()
+table(KindOfDeath$MannerOfDeath,ifelse(fitted(model)>0.5,1,0)) %>% plot()
+par(mfrow=c(2,2))
+plot(model)
+
+```
+
+We see that we can predict suicide very well and murder fairly well
+
+
+## 5
+
+```{r , message=FALSE, warning=FALSE}
+
+M = UniqueMSD
+splitter <- sample(seq_len(nrow(M)), size= 0.8*nrow(M), replace=F)
+mstrain <- M[splitter,]
+mstest <- M[-splitter,]
+
+
+model_glm_trained = glm(MannerOfDeath ~ .-DayOfWeekOfDeath -ResidentStatus -MonthOfDeath - Race - MethodOfDisposition, data=mstrain, family="binomial")
+summary(model_glm_trained)
+
+mstest$guess = predict(model_glm_trained, newdata=mstest, type="response")
+mstest %>% mutate(acc_cut = ifelse(guess>0.5, 1, 0)) -> mstest
+mstrain$guess = predict(model_glm_trained, newdata=mstrain, type="response")
+mstrain %>% mutate(acc_cut = ifelse(guess>0.5,1,0)) -> mstrain
+
+sampP = filter(mstest ,MannerOfDeath==1)
+sampN = filter(mstest ,MannerOfDeath==0)
+sampTP = filter(sampP ,acc_cut == 1)
+sampTN = filter(sampN ,acc_cut==0)
+sampFP = filter(sampN ,acc_cut==1)
+sampFN = filter(sampP ,acc_cut == 0)
+P = nrow(sampP)
+P
+N = nrow(sampN)
+N
+TP = nrow(sampTP)
+TP
+TN = nrow(sampTN)
+TN
+FP = nrow(sampFP)
+FP
+FN = nrow(sampFN)
+FN
+ACC = (TP+TN)/(P+N)
+ACC
+FPR = 1-TN/N
+FPR
+TPR = TP/P
+TPR
+
+conf_mat_info = ConfusionMatrixInfo( data = mstest, predict = "guess", actual = "MannerOfDeath", cutoff = .5 )
+conf_mat_info$plot
+
+
+```
+
+
+We see that we have around 95% accuracy which is good enough
+
+## 6
+
+accuracy_cutoff_info = AccuracyCutoffInfo(train=mstrain, test=mstest, predict="guess", actual="MannerOfDeath")
+accuracy_cutoff_info$plot
+index_maxed = which.max(accuracy_cut_off_info$data[,test])
+accuracy_cutoff_info$data[index_maxed, cutoff]
+
+
+## 7
+
+false positive error has too much overhead here so we give it more attention
+
+```{r , message=FALSE, warning=FALSE}
+
+# user-defined different cost for false negative and false positive
+cost_fp <- 200
+cost_fn <- 100
+roc_info <- ROCInfo( data = conf_mat_info$data, predict = "predict", actual = "actual", cost.fp = cost_fp, cost.fn = cost_fn )
+grid::grid.draw(roc_info$plot)
+roc_info$cutoff
+
+```
+best cut-off is around 0.51
+
+
+## 8
+
+In the part labeled with Confusion Matrix we can see different kinds of error, and the overall error for our glm is around 0.2 which is neithere excellent nor very bad.
+
+
+```{r , message=FALSE, warning=FALSE}
+
+h2o.init()
+h2o_death = as.h2o(UniqueMSD)
+h2o_glm = h2o.glm(y = "MannerOfDeath", x= c("Education2003Revision" , "Sex" , "PlaceOfDeathAndDecedentsStatus", "MethodOfDisposition","Autopsy", "PlaceOfInjury" ,"Race", "MaritalStatus" , "ResidentStatus"), training_frame = h2o_death, family="binomial",nfolds = 5)
+h2o_glm
+
+```
+
+
+
+## 9
+
+We implement a clustering algorithms. We try to find the most similar known data to our test data and use that result as our prediction. similarity here means the least sum of squared differences/means over all factors
+it takes a pretty long time to run but it will work better than our current methods
+
+```{r , message=FALSE, warning=FALSE}
+
+train = na.omit(mstrain)
+test = na.omit(mstest)
+train = data.matrix(train)
+test = data.matrix(test)
+len = nrow(train)
+
+dist = function(x, y) {
+  res = 0
+  for (i in 1:19) {
+    temp = (test[x,i] - train[y,i])^2
+    res = res + temp
+  }
+  res
+}
+
+dist(1,13595)
+len2 = nrow(test)
+test = as.data.frame(test)
+rr = test$MannerOfDeath
+for(i in 1:len2) {
+  t = which.min(dist(i,1:len))
+  rr[i] = train[t[[1]],'MannerOfDeath']      
+}
+
+misClasificError <- mean(rr != test$MannerOfDeath)
+print(paste('Accuracy',1-misClasificError))
+misClasificError <- mean(rr != test$MannerOfDeath)^2
+print(paste('MSE', misClasificError))
+
+```
+
+
+
