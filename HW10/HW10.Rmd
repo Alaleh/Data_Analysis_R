@@ -1,0 +1,713 @@
+---
+title: 'Cluster Analysis - WDI Indicators'
+author: "Alaleh Ahmadian"
+date: "May 8, 2018"
+output:
+  prettydoc::html_pretty:
+    highlight: github
+    theme: tactile
+  rmarkdown::html_document: default
+  html_document:
+    df_print: paged
+---
+
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+
+## Libraries:
+
+```{r , message=FALSE, warning=FALSE}
+
+library(dplyr)
+library(highcharter)
+library(ggbiplot)
+library(ggplot2)
+library(tidyr)
+library(stringr)
+
+```
+
+
+
+## Data:
+
+```{r , message=FALSE, warning=FALSE}
+
+wdidata = read.csv("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/Data/WDI/WDIData.csv")
+names(wdidata) <- iconv(names(wdidata), to='ASCII', sub='')
+
+```
+
+
+## 1
+
+NY.ADJ.NNTY.PC.CD : Adjusted net national income per capita(current US$) 
+SP.DYN.LE00.IN : Life expectancy at birth, total (years) 
+NY.GDP.PCAP.CD
+
+```{r , message=FALSE, warning=FALSE}
+
+poverty = c("NY.ADJ.NNTY.PC.CD", "SP.DYN.LE00.IN", "NY.GDP.PCAP.CD")
+
+wdidata %>% filter(Indicator.Code %in% poverty) %>% 
+  select(X2016, ..Country.Name , Country.Code, Indicator.Code) %>% 
+  spread(Indicator.Code, X2016) %>% 
+  arrange(NY.ADJ.NNTY.PC.CD) %>% 
+  head(10) %>% rowwise() %>% 
+  mutate(payedByDay = as.numeric(NY.ADJ.NNTY.PC.CD)/365) %>%
+  arrange(..Country.Name, NY.ADJ.NNTY.PC.CD) -> poorestCountries
+
+poorestCountries
+
+ggplot(poorestCountries) + geom_bar(aes(x = reorder(..Country.Name, NY.ADJ.NNTY.PC.CD), y = payedByDay), stat = "identity") + labs(title = "Income in a month") + theme_minimal()
+
+ggplot(poorestCountries) + geom_bar(aes(x = reorder(Country.Code, NY.ADJ.NNTY.PC.CD), y = SP.DYN.LE00.IN), stat = "identity") + labs(title = "Life Expectancy") + theme_minimal()
+
+```
+
+
+
+## 2
+
+
+```{r , message=FALSE, warning=FALSE}
+
+wdidata %>% filter(Indicator.Code == "SP.DYN.LE00.IN" ) %>% 
+  select(Country.Code, X1960:X2016) %>% 
+  gather(key = "year", value = "lifeExpectancy", X1960:X2016) -> rwandaTragedy 
+
+lineData = rwandaTragedy %>% filter(Country.Code == "RWA")
+
+ggplot(rwandaTragedy, aes(x = year, y = lifeExpectancy)) + geom_boxplot(data = rwandaTragedy) + geom_line(data = lineData, color = "red", group = 1)
+
+wdidata %>% filter(Indicator.Code == "SP.DYN.LE00.IN" ) %>% 
+  select(Country.Code, X1960:X2016) %>% 
+  gather(key = "year", value = "lifeExpectancy", X1985:X2005) -> rwandaTragedy 
+
+lineData = rwandaTragedy %>% filter(Country.Code == "RWA")
+
+ggplot(rwandaTragedy, aes(x = year, y = lifeExpectancy)) + geom_boxplot(data = rwandaTragedy) + geom_line(data = lineData, color = "red", group = 1)
+
+```
+
+
+The Rwandan genocide, also known as the genocide against the Tutsi, was a genocidal mass slaughter of Tutsi in Rwanda by members of the Hutu majority government. An estimated 500,000 to 1,000,000 Rwandans were killed during the 100-day period from 7 April to mid-July 1994, constituting as many as 70% of the Tutsi population. Additionally, 30% of the Pygmy Batwa were killed. (From wikipedia)
+
+
+
+
+## 3
+
+
+```{r , message=FALSE, warning=FALSE}
+
+wdidata %>% filter(Indicator.Code=="SP.DYN.LE00.IN") %>%
+  select(Country.Code, Indicator.Code,X2015) %>% 
+  spread(Indicator.Code, X2015) -> life_exp 
+
+ggplot(life_exp, aes(x = reorder(Country.Code, SP.DYN.LE00.IN), y = SP.DYN.LE00.IN)) +
+  geom_line(group = 1) + labs (x = "countries", y = "life expectancy in years") 
+
+
+wdidata %>% filter(Indicator.Code %in% c("SH.XPD.CHEX.PC.CD") ) %>%
+  select(Country.Code, Indicator.Code,X2015) %>% 
+  spread(Indicator.Code, X2015) -> health 
+
+ggplot(health, aes(x = reorder(Country.Code, SH.XPD.CHEX.PC.CD), y = SH.XPD.CHEX.PC.CD)) +
+  geom_line(group = 1) + 
+  labs (x = "countries", y = "$") + 
+  geom_point(color = "green")
+
+```
+
+With rise of health costs, life expectency rises somehow
+
+## 4
+
+NE.CON.PRVT.PC.KD is Household final consumption expenditure per capita (constant 2010 US$)
+
+```{r , message=FALSE, warning=FALSE}
+
+wdidata %>% filter(Country.Code == "IRN" & Indicator.Code=="NE.CON.PRVT.PC.KD") %>%
+  gather(key = "year", value = "value", X1960:X2017) -> HH_consumption
+  
+ggplot(HH_consumption, aes(x = year, y = value)) + geom_line(color = "blue", group = 1) + geom_point(color = "red") + theme(axis.text.x = element_text(angle = 90))
+
+
+```
+
+Yes the consumption power has had growth
+
+
+## 5
+
+
+```{r , message=FALSE, warning=FALSE}
+
+FinancialIndicators = c("NY.GDP.MKTP.KD.ZG", "BX.KLT.DINV.WD.GD.ZS", "NY.GDP.MKTP.CD", "NY.GDP.MKTP.KD.ZG", "BX.KLT.DINV.WD.GD.ZS", "BM.KLT.DINV.WD.GD.ZS", "BX.KLT.DINV.WD.GD.ZS", "BM.KLT.DINV.WD.GD.ZS", "CM.MKT.TRAD.GD.ZS", "NV.IND.MANF.ZS", "NV.IND.TOTL.ZS", "NV.SRV.TETC.ZS", "NV.AGR.TOTL.ZS", "NE.EXP.GNFS.ZS", "NE.IMP.GNFS.ZS", "FS.AST.PRVT.GD.ZS", "FR.INR.RINR", "NY.TAX.NIND.CD", "SL.EMP.MPYR.ZS", "SL.EMP.TOTL.SP.ZS")
+
+wdidata %>% filter(..Country.Name %in% c("World", "Iran, Islamic Rep.")) %>% 
+  filter(Indicator.Code %in% FinancialIndicators) %>% 
+  arrange(Indicator.Name) -> financialGrowth 
+
+financialGrowth %>% filter(Indicator.Code == "NY.GDP.MKTP.KD.ZG") %>% 
+    gather(key = "year", value = "val", X1960:X2017) %>% 
+    hchart(hcaes(x = year, y = val, group = ..Country.Name), type = "line") %>% 
+    hc_title(text = "NY.GDP.MKTP.KD.ZG") 
+
+financialGrowth %>% filter(Indicator.Code == "BX.KLT.DINV.WD.GD.ZS") %>% 
+    gather(key = "year", value = "val", X1960:X2017) %>% 
+    hchart(hcaes(x = year, y = val, group = ..Country.Name), type = "line") %>% 
+    hc_title(text = "BX.KLT.DINV.WD.GD.ZS") 
+
+financialGrowth %>% filter(Indicator.Code == "NY.GDP.MKTP.CD") %>% 
+    gather(key = "year", value = "val", X1960:X2017) %>% 
+    hchart(hcaes(x = year, y = val, group = ..Country.Name), type = "line") %>% 
+    hc_title(text = "NY.GDP.MKTP.CD") 
+
+financialGrowth %>% filter(Indicator.Code == "NY.TAX.NIND.CD") %>% 
+    gather(key = "year", value = "val", X1960:X2017) %>% 
+    hchart(hcaes(x = year, y = val, group = ..Country.Name), type = "line") %>% 
+    hc_title(text = "NY.TAX.NIND.CD") 
+
+financialGrowth %>% filter(Indicator.Code == "SL.EMP.MPYR.ZS") %>% 
+    gather(key = "year", value = "val", X1960:X2017) %>% 
+    hchart(hcaes(x = year, y = val, group = ..Country.Name), type = "line") %>% 
+    hc_title(text = "SL.EMP.MPYR.ZS") 
+
+financialGrowth %>% filter(Indicator.Code == "CM.MKT.TRAD.GD.ZS") %>% 
+    gather(key = "year", value = "val", X1960:X2017) %>% 
+    hchart(hcaes(x = year, y = val, group = ..Country.Name), type = "line") %>% 
+    hc_title(text = "CM.MKT.TRAD.GD.ZS") 
+
+financialGrowth %>% filter(Indicator.Code == "SL.EMP.TOTL.SP.ZS") %>% 
+    gather(key = "year", value = "val", X1960:X2017) %>% 
+    hchart(hcaes(x = year, y = val, group = ..Country.Name), type = "line") %>% 
+    hc_title(text = "SL.EMP.TOTL.SP.ZS") 
+
+financialGrowth %>% filter(Indicator.Code == "NV.IND.MANF.ZS") %>% 
+    gather(key = "year", value = "val", X1960:X2017) %>% 
+    hchart(hcaes(x = year, y = val, group = ..Country.Name), type = "line") %>% 
+    hc_title(text = "NV.IND.MANF.ZS") 
+
+financialGrowth %>% filter(Indicator.Code == "NE.IMP.GNFS.ZS") %>% 
+    gather(key = "year", value = "val", X1960:X2017) %>% 
+    hchart(hcaes(x = year, y = val, group = ..Country.Name), type = "line") %>% 
+    hc_title(text = "NE.IMP.GNFS.ZS") 
+
+financialGrowth %>% filter(Indicator.Code == "NE.EXP.GNFS.ZS") %>% 
+    gather(key = "year", value = "val", X1960:X2017) %>% 
+    hchart(hcaes(x = year, y = val, group = ..Country.Name), type = "line") %>% 
+    hc_title(text = "NE.EXP.GNFS.ZS") 
+
+financialGrowth %>% filter(Indicator.Code == "FS.AST.PRVT.GD.ZS") %>% 
+    gather(key = "year", value = "val", X1960:X2017) %>% 
+    hchart(hcaes(x = year, y = val, group = ..Country.Name), type = "line") %>% 
+    hc_title(text = "FS.AST.PRVT.GD.ZS") 
+
+financialGrowth %>% filter(Indicator.Code == "BM.KLT.DINV.WD.GD.ZS") %>% 
+    gather(key = "year", value = "val", X1960:X2017) %>% 
+    hchart(hcaes(x = year, y = val, group = ..Country.Name), type = "line") %>% 
+    hc_title(text = "BM.KLT.DINV.WD.GD.ZS") 
+
+financialGrowth %>% filter(Indicator.Code == "NY.GDP.MKTP.KD.ZG") %>% 
+    gather(key = "year", value = "val", X1960:X2017) %>% 
+    hchart(hcaes(x = year, y = val, group = ..Country.Name), type = "line") %>% 
+    hc_title(text = "NY.GDP.MKTP.KD.ZG") 
+
+financialGrowth %>% filter(Indicator.Code == "FR.INR.RINR") %>% 
+    gather(key = "year", value = "val", X1960:X2017) %>% 
+    hchart(hcaes(x = year, y = val, group = ..Country.Name), type = "line") %>% 
+    hc_title(text = "FR.INR.RINR") 
+
+financialGrowth %>% filter(Indicator.Code == "BX.KLT.DINV.WD.GD.ZS") %>% 
+    gather(key = "year", value = "val", X1960:X2017) %>% 
+    hchart(hcaes(x = year, y = val, group = ..Country.Name), type = "line") %>% 
+    hc_title(text = "BX.KLT.DINV.WD.GD.ZS") 
+
+financialGrowth %>% filter(Indicator.Code == "BM.KLT.DINV.WD.GD.ZS") %>% 
+    gather(key = "year", value = "val", X1960:X2017) %>% 
+    hchart(hcaes(x = year, y = val, group = ..Country.Name), type = "line") %>% 
+    hc_title(text = "BM.KLT.DINV.WD.GD.ZS") 
+
+financialGrowth %>% filter(Indicator.Code == "NV.SRV.TETC.ZS") %>% 
+    gather(key = "year", value = "val", X1960:X2017) %>% 
+    hchart(hcaes(x = year, y = val, group = ..Country.Name), type = "line") %>% 
+    hc_title(text = "NV.SRV.TETC.ZS") 
+
+financialGrowth %>% filter(Indicator.Code == "BX.KLT.DINV.WD.GD.ZS") %>% 
+    gather(key = "year", value = "val", X1960:X2017) %>% 
+    hchart(hcaes(x = year, y = val, group = ..Country.Name), type = "line") %>% 
+    hc_title(text = "BX.KLT.DINV.WD.GD.ZS") 
+
+financialGrowth %>% filter(Indicator.Code == "NV.IND.TOTL.ZS") %>% 
+    gather(key = "year", value = "val", X1960:X2017) %>% 
+    hchart(hcaes(x = year, y = val, group = ..Country.Name), type = "line") %>% 
+    hc_title(text = "NV.IND.TOTL.ZS") 
+
+financialGrowth %>% filter(Indicator.Code == "NV.AGR.TOTL.ZS") %>% 
+    gather(key = "year", value = "val", X1960:X2017) %>% 
+    hchart(hcaes(x = year, y = val, group = ..Country.Name), type = "line") %>% 
+    hc_title(text = "NV.AGR.TOTL.ZS") 
+
+```
+
+In most indicators no growth is seen and there's no trace of improvements.
+
+
+
+## 6
+
+
+```{r , message=FALSE, warning=FALSE}
+
+wdidata %>% filter(Indicator.Code %in% FinancialIndicators) %>%
+  mutate(Value = rowMeans(select(., X1980:X2017), na.rm = T)) %>%
+  select(Value, ..Country.Name, Indicator.Name) %>%
+  spread(Indicator.Name, Value) %>% na.omit() -> clusteringData
+
+clusteringData[,-1] = as.numeric(unlist(clusteringData[,-1]))
+clusteringData[,-1] = scale(clusteringData[,-1])
+
+AllClusts = kmeans(clusteringData[,-1], iter.max = 200, centers = 3)
+
+clusteringData$cluster = AllClusts$cluster
+
+data.frame(clusteringData$..Country.Name[clusteringData$cluster==1] )
+data.frame(clusteringData$..Country.Name[clusteringData$cluster==2] )
+data.frame(clusteringData$..Country.Name[clusteringData$cluster==3] )
+
+```
+
+
+
+## 7
+
+
+```{r , message=FALSE, warning=FALSE}
+
+ggbiplot(prcomp(clusteringData[,-1], center=T, scale. = T), labels=clusteringData$..Country.Name, groups=as.factor(clusteringData$cluster) , size=30) + geom_point(size=.4) + theme_minimal()
+
+```
+
+
+
+
+## 8
+
+
+```{r , message=FALSE, warning=FALSE}
+
+temp = wdidata %>% filter(..Country.Name=="Iran, Islamic Rep.")
+
+fit1 = lm(X2014 ~ X2013 + X2012 + X2011 + X2010 + X2009, data = temp)
+summary(fit1)
+
+```
+
+
+
+
+## 9
+
+
+```{r , message=FALSE, warning=FALSE}
+
+healthIndicators= c("SP.DYN.LE00.IN", "SP.DYN.TFRT.IN", "SP.DYN.CONU.ZS", "SP.DYN.CDRT.IN", "SP.POP.DPND", "SH.XPD.CHEX.PP.CD", "NY.ADJ.DPEM.GN.ZS", "SH.MED.PHYS.ZS", "SH.MED.BEDS.ZS", "SH.H2O.SMDW.ZS", "SN.ITK.DFCT", "SN.ITK.DEFC.ZS", "SH.ANM.CHLD.ZS", "SH.DYN.AIDS.ZS", "SH.STA.DIAB.ZS", "SH.IMM.IDPT", "SH.IMM.HEPB", "SH.IMM.MEAS", "SH.TBS.INCD")
+
+wdidata %>% filter(Indicator.Code=="SP.DYN.LE00.IN") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldHealth
+
+IranHealth = worldHealth %>% filter(..Country.Name=="Iran, Islamic Rep.")
+  
+  hcboxplot(x = worldHealth$Value, var = worldHealth$Year, outliers = FALSE, name="World") %>% hc_chart(type="column") %>% hc_add_series(IranHealth$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SP.DYN.LE00.IN") %>% hc_add_theme(hc_theme_google())
+  
+wdidata %>% filter(Indicator.Code=="SP.DYN.TFRT.IN") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldHealth
+
+IranHealth = worldHealth %>% filter(..Country.Name=="Iran, Islamic Rep.")
+  
+  hcboxplot(x = worldHealth$Value, var = worldHealth$Year, outliers = FALSE, name="World") %>% hc_chart(type="column") %>% hc_add_series(IranHealth$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SP.DYN.TFRT.IN") %>% hc_add_theme(hc_theme_google())
+  
+wdidata %>% filter(Indicator.Code=="SP.DYN.CONU.ZS") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldHealth
+
+IranHealth = worldHealth %>% filter(..Country.Name=="Iran, Islamic Rep.")
+  
+  hcboxplot(x = worldHealth$Value, var = worldHealth$Year, outliers = FALSE, name="World") %>% hc_chart(type="column") %>% hc_add_series(IranHealth$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SP.DYN.CONU.ZS") %>% hc_add_theme(hc_theme_google())
+    
+  
+wdidata %>% filter(Indicator.Code=="SP.DYN.CDRT.IN") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldHealth
+
+IranHealth = worldHealth %>% filter(..Country.Name=="Iran, Islamic Rep.")
+  
+  hcboxplot(x = worldHealth$Value, var = worldHealth$Year, outliers = FALSE, name="World") %>% hc_chart(type="column") %>% hc_add_series(IranHealth$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SP.DYN.CDRT.IN") %>% hc_add_theme(hc_theme_google())
+    
+ 
+wdidata %>% filter(Indicator.Code=="SP.POP.DPND") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldHealth
+
+IranHealth = worldHealth %>% filter(..Country.Name=="Iran, Islamic Rep.")
+  
+  hcboxplot(x = worldHealth$Value, var = worldHealth$Year, outliers = FALSE, name="World") %>% hc_chart(type="column") %>% hc_add_series(IranHealth$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SP.POP.DPND") %>% hc_add_theme(hc_theme_google()) 
+  
+  
+
+wdidata %>% filter(Indicator.Code=="SH.XPD.CHEX.PP.CD") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldHealth
+
+IranHealth = worldHealth %>% filter(..Country.Name=="Iran, Islamic Rep.")
+  
+  hcboxplot(x = worldHealth$Value, var = worldHealth$Year, outliers = FALSE, name="World") %>% hc_chart(type="column") %>% hc_add_series(IranHealth$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SH.XPD.CHEX.PP.CD") %>% hc_add_theme(hc_theme_google()) 
+
+  
+
+wdidata %>% filter(Indicator.Code=="NY.ADJ.DPEM.GN.ZS") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldHealth
+
+IranHealth = worldHealth %>% filter(..Country.Name=="Iran, Islamic Rep.")
+  
+  hcboxplot(x = worldHealth$Value, var = worldHealth$Year, outliers = FALSE, name="World") %>% hc_chart(type="column") %>% hc_add_series(IranHealth$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "NY.ADJ.DPEM.GN.ZS") %>% hc_add_theme(hc_theme_google()) 
+
+  
+
+wdidata %>% filter(Indicator.Code=="SH.MED.PHYS.ZS") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldHealth
+
+IranHealth = worldHealth %>% filter(..Country.Name=="Iran, Islamic Rep.")
+  
+  hcboxplot(x = worldHealth$Value, var = worldHealth$Year, outliers = FALSE, name="World") %>% hc_chart(type="column") %>% hc_add_series(IranHealth$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SH.MED.PHYS.ZS") %>% hc_add_theme(hc_theme_google()) 
+  
+  
+wdidata %>% filter(Indicator.Code=="SH.MED.BEDS.ZS") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldHealth
+
+IranHealth = worldHealth %>% filter(..Country.Name=="Iran, Islamic Rep.")
+  
+  hcboxplot(x = worldHealth$Value, var = worldHealth$Year, outliers = FALSE, name="World") %>% hc_chart(type="column") %>% hc_add_series(IranHealth$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SH.MED.BEDS.ZS") %>% hc_add_theme(hc_theme_google()) 
+  
+  
+  
+wdidata %>% filter(Indicator.Code=="SH.H2O.SMDW.ZS") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldHealth
+
+IranHealth = worldHealth %>% filter(..Country.Name=="Iran, Islamic Rep.")
+  
+  hcboxplot(x = worldHealth$Value, var = worldHealth$Year, outliers = FALSE, name="World") %>% hc_chart(type="column") %>% hc_add_series(IranHealth$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SH.H2O.SMDW.ZS") %>% hc_add_theme(hc_theme_google()) 
+  
+  
+wdidata %>% filter(Indicator.Code=="SN.ITK.DFCT") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldHealth
+
+IranHealth = worldHealth %>% filter(..Country.Name=="Iran, Islamic Rep.")
+  
+  hcboxplot(x = worldHealth$Value, var = worldHealth$Year, outliers = FALSE, name="World") %>% hc_chart(type="column") %>% hc_add_series(IranHealth$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SN.ITK.DFCT") %>% hc_add_theme(hc_theme_google()) 
+  
+  
+  
+wdidata %>% filter(Indicator.Code=="SN.ITK.DEFC.ZS") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldHealth
+
+IranHealth = worldHealth %>% filter(..Country.Name=="Iran, Islamic Rep.")
+  
+  hcboxplot(x = worldHealth$Value, var = worldHealth$Year, outliers = FALSE, name="World") %>% hc_chart(type="column") %>% hc_add_series(IranHealth$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SN.ITK.DEFC.ZS") %>% hc_add_theme(hc_theme_google()) 
+  
+  
+  
+wdidata %>% filter(Indicator.Code=="SH.ANM.CHLD.ZS") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldHealth
+
+IranHealth = worldHealth %>% filter(..Country.Name=="Iran, Islamic Rep.")
+  
+  hcboxplot(x = worldHealth$Value, var = worldHealth$Year, outliers = FALSE, name="World") %>% hc_chart(type="column") %>% hc_add_series(IranHealth$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SH.ANM.CHLD.ZS") %>% hc_add_theme(hc_theme_google()) 
+  
+  
+  
+wdidata %>% filter(Indicator.Code=="SN.ITK.DEFC.ZS") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldHealth
+
+IranHealth = worldHealth %>% filter(..Country.Name=="Iran, Islamic Rep.")
+  
+  hcboxplot(x = worldHealth$Value, var = worldHealth$Year, outliers = FALSE, name="World") %>% hc_chart(type="column") %>% hc_add_series(IranHealth$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SN.ITK.DEFC.ZS") %>% hc_add_theme(hc_theme_google()) 
+  
+  
+  
+wdidata %>% filter(Indicator.Code=="SH.DYN.AIDS.ZS") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldHealth
+
+IranHealth = worldHealth %>% filter(..Country.Name=="Iran, Islamic Rep.")
+  
+  hcboxplot(x = worldHealth$Value, var = worldHealth$Year, outliers = FALSE, name="World") %>% hc_chart(type="column") %>% hc_add_series(IranHealth$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SH.DYN.AIDS.ZS") %>% hc_add_theme(hc_theme_google()) 
+  
+  
+  
+wdidata %>% filter(Indicator.Code=="SH.STA.DIAB.ZS") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldHealth
+
+IranHealth = worldHealth %>% filter(..Country.Name=="Iran, Islamic Rep.")
+  
+  hcboxplot(x = worldHealth$Value, var = worldHealth$Year, outliers = FALSE, name="World") %>% hc_chart(type="column") %>% hc_add_series(IranHealth$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SH.STA.DIAB.ZS") %>% hc_add_theme(hc_theme_google()) 
+  
+  
+  
+wdidata %>% filter(Indicator.Code=="SH.IMM.IDPT") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldHealth
+
+IranHealth = worldHealth %>% filter(..Country.Name=="Iran, Islamic Rep.")
+  
+  hcboxplot(x = worldHealth$Value, var = worldHealth$Year, outliers = FALSE, name="World") %>% hc_chart(type="column") %>% hc_add_series(IranHealth$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SH.IMM.IDPT") %>% hc_add_theme(hc_theme_google()) 
+  
+  
+  
+wdidata %>% filter(Indicator.Code=="SH.IMM.HEPB") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldHealth
+
+IranHealth = worldHealth %>% filter(..Country.Name=="Iran, Islamic Rep.")
+  
+  hcboxplot(x = worldHealth$Value, var = worldHealth$Year, outliers = FALSE, name="World") %>% hc_chart(type="column") %>% hc_add_series(IranHealth$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SH.IMM.HEPB") %>% hc_add_theme(hc_theme_google()) 
+  
+  
+  
+wdidata %>% filter(Indicator.Code=="SH.IMM.MEAS") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldHealth
+
+IranHealth = worldHealth %>% filter(..Country.Name=="Iran, Islamic Rep.")
+  
+  hcboxplot(x = worldHealth$Value, var = worldHealth$Year, outliers = FALSE, name="World") %>% hc_chart(type="column") %>% hc_add_series(IranHealth$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SH.IMM.MEAS") %>% hc_add_theme(hc_theme_google()) 
+  
+  
+  
+wdidata %>% filter(Indicator.Code=="SH.TBS.INCD") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldHealth
+
+IranHealth = worldHealth %>% filter(..Country.Name=="Iran, Islamic Rep.")
+  
+  hcboxplot(x = worldHealth$Value, var = worldHealth$Year, outliers = FALSE, name="World") %>% hc_chart(type="column") %>% hc_add_series(IranHealth$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SH.TBS.INCD") %>% hc_add_theme(hc_theme_google()) 
+  
+  
+  
+  
+EducationIndicators = c("SE.XPD.TOTL.GD.ZS", "GB.XPD.RSDV.GD.ZS", "NY.ADJ.AEDU.GN.ZS", "SE.COM.DURS", "SE.PRM.OENR.ZS", "SE.ENR.PRSC.FM.ZS", "SE.PRE.ENRR", "SE.PRM.ENRR", "SE.SEC.ENRR", "SE.TER.ENRR", "SE.XPD.PRIM.ZS", "SE.XPD.SECO.ZS", "SE.XPD.TERT.ZS", "SE.PRM.UNER.ZS", "SE.ADT.LITR.ZS")
+
+
+wdidata %>% filter(Indicator.Code=="SE.XPD.TOTL.GD.ZS") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldEdu
+IranEdu = worldEdu %>% filter(..Country.Name=="Iran, Islamic Rep.")
+hcboxplot(x = worldEdu$Value, var = worldEdu$Year, outliers = FALSE, name="World") %>% hc_chart(type = "column") %>% hc_add_series(IranEdu$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SE.XPD.TOTL.GD.ZS") %>% hc_add_theme(hc_theme_google())
+  
+
+
+wdidata %>% filter(Indicator.Code=="GB.XPD.RSDV.GD.ZS") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldEdu
+IranEdu = worldEdu %>% filter(..Country.Name=="Iran, Islamic Rep.")
+hcboxplot(x = worldEdu$Value, var = worldEdu$Year, outliers = FALSE, name="World") %>% hc_chart(type = "column") %>% hc_add_series(IranEdu$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "GB.XPD.RSDV.GD.ZS") %>% hc_add_theme(hc_theme_google())
+  
+
+wdidata %>% filter(Indicator.Code=="NY.ADJ.AEDU.GN.ZS") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldEdu
+IranEdu = worldEdu %>% filter(..Country.Name=="Iran, Islamic Rep.")
+hcboxplot(x = worldEdu$Value, var = worldEdu$Year, outliers = FALSE, name="World") %>% hc_chart(type = "column") %>% hc_add_series(IranEdu$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "NY.ADJ.AEDU.GN.ZS") %>% hc_add_theme(hc_theme_google())
+  
+wdidata %>% filter(Indicator.Code=="SE.COM.DURS") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldEdu
+IranEdu = worldEdu %>% filter(..Country.Name=="Iran, Islamic Rep.")
+hcboxplot(x = worldEdu$Value, var = worldEdu$Year, outliers = FALSE, name="World") %>% hc_chart(type = "column") %>% hc_add_series(IranEdu$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SE.COM.DURS") %>% hc_add_theme(hc_theme_google())
+  
+wdidata %>% filter(Indicator.Code=="SE.PRM.OENR.ZS") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldEdu
+IranEdu = worldEdu %>% filter(..Country.Name=="Iran, Islamic Rep.")
+hcboxplot(x = worldEdu$Value, var = worldEdu$Year, outliers = FALSE, name="World") %>% hc_chart(type = "column") %>% hc_add_series(IranEdu$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SE.PRM.OENR.ZS") %>% hc_add_theme(hc_theme_google())
+  
+wdidata %>% filter(Indicator.Code=="SE.ENR.PRSC.FM.ZS") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldEdu
+IranEdu = worldEdu %>% filter(..Country.Name=="Iran, Islamic Rep.")
+hcboxplot(x = worldEdu$Value, var = worldEdu$Year, outliers = FALSE, name="World") %>% hc_chart(type = "column") %>% hc_add_series(IranEdu$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SE.ENR.PRSC.FM.ZS") %>% hc_add_theme(hc_theme_google())
+  
+wdidata %>% filter(Indicator.Code=="SE.PRE.ENRR") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldEdu
+IranEdu = worldEdu %>% filter(..Country.Name=="Iran, Islamic Rep.")
+hcboxplot(x = worldEdu$Value, var = worldEdu$Year, outliers = FALSE, name="World") %>% hc_chart(type = "column") %>% hc_add_series(IranEdu$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SE.PRE.ENRR") %>% hc_add_theme(hc_theme_google())
+  
+wdidata %>% filter(Indicator.Code=="SE.SEC.ENRR") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldEdu
+IranEdu = worldEdu %>% filter(..Country.Name=="Iran, Islamic Rep.")
+hcboxplot(x = worldEdu$Value, var = worldEdu$Year, outliers = FALSE, name="World") %>% hc_chart(type = "column") %>% hc_add_series(IranEdu$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SE.SEC.ENRR") %>% hc_add_theme(hc_theme_google())
+  
+wdidata %>% filter(Indicator.Code=="SE.TER.ENRR") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldEdu
+IranEdu = worldEdu %>% filter(..Country.Name=="Iran, Islamic Rep.")
+hcboxplot(x = worldEdu$Value, var = worldEdu$Year, outliers = FALSE, name="World") %>% hc_chart(type = "column") %>% hc_add_series(IranEdu$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SE.TER.ENRR") %>% hc_add_theme(hc_theme_google())
+  
+wdidata %>% filter(Indicator.Code=="SE.XPD.PRIM.ZS") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldEdu
+IranEdu = worldEdu %>% filter(..Country.Name=="Iran, Islamic Rep.")
+hcboxplot(x = worldEdu$Value, var = worldEdu$Year, outliers = FALSE, name="World") %>% hc_chart(type = "column") %>% hc_add_series(IranEdu$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SE.XPD.PRIM.ZS") %>% hc_add_theme(hc_theme_google())
+  
+wdidata %>% filter(Indicator.Code=="SE.XPD.SECO.ZS") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldEdu
+IranEdu = worldEdu %>% filter(..Country.Name=="Iran, Islamic Rep.")
+hcboxplot(x = worldEdu$Value, var = worldEdu$Year, outliers = FALSE, name="World") %>% hc_chart(type = "column") %>% hc_add_series(IranEdu$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SE.XPD.SECO.ZS") %>% hc_add_theme(hc_theme_google())
+  
+wdidata %>% filter(Indicator.Code=="SE.XPD.TERT.ZS") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldEdu
+IranEdu = worldEdu %>% filter(..Country.Name=="Iran, Islamic Rep.")
+hcboxplot(x = worldEdu$Value, var = worldEdu$Year, outliers = FALSE, name="World") %>% hc_chart(type = "column") %>% hc_add_series(IranEdu$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SE.XPD.TERT.ZS") %>% hc_add_theme(hc_theme_google())
+  
+wdidata %>% filter(Indicator.Code=="SE.PRM.UNER.ZS") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldEdu
+IranEdu = worldEdu %>% filter(..Country.Name=="Iran, Islamic Rep.")
+hcboxplot(x = worldEdu$Value, var = worldEdu$Year, outliers = FALSE, name="World") %>% hc_chart(type = "column") %>% hc_add_series(IranEdu$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SE.PRM.UNER.ZS") %>% hc_add_theme(hc_theme_google())
+  
+wdidata %>% filter(Indicator.Code=="SE.ADT.LITR.ZS") %>%
+    select(Indicator.Name, ..Country.Name, X1990:X2017) %>%
+    gather(Year, Value, X1990:X2017) -> worldEdu
+IranEdu = worldEdu %>% filter(..Country.Name=="Iran, Islamic Rep.")
+hcboxplot(x = worldEdu$Value, var = worldEdu$Year, outliers = FALSE, name="World") %>% hc_chart(type = "column") %>% hc_add_series(IranEdu$Value, type="spline", name="Iran") %>% hc_xAxis(title = list(text = "Year")) %>% hc_yAxis(title = "SE.ADT.LITR.ZS") %>% hc_add_theme(hc_theme_google())
+
+
+
+
+wdidata %>% filter(Indicator.Code %in% EducationIndicators) %>%
+  mutate(Value = rowMeans(select(., X1980:X2017), na.rm = T)) %>%
+  select(Value, ..Country.Name, Indicator.Name) %>%
+  spread(Indicator.Name, Value) %>% na.omit() -> clusteringData
+
+clusteringData[,-1] = as.numeric(unlist(clusteringData[,-1]))
+clusteringData[,-1] = scale(clusteringData[,-1])
+
+AllClusts = kmeans(clusteringData[,-1], iter.max = 200, centers = 3)
+
+clusteringData$cluster = AllClusts$cluster
+
+data.frame(clusteringData$..Country.Name[clusteringData$cluster==1] )
+data.frame(clusteringData$..Country.Name[clusteringData$cluster==2] )
+data.frame(clusteringData$..Country.Name[clusteringData$cluster==3] )
+
+ggbiplot(prcomp(clusteringData[,-1], center=T, scale. = T), labels=clusteringData$..Country.Name, groups=as.factor(clusteringData$cluster) , size=30) + geom_point(size=.4) + theme_minimal()
+
+
+
+
+
+
+wdidata %>% filter(Indicator.Code %in% healthIndicators) %>%
+  mutate(Value = rowMeans(select(., X1980:X2017), na.rm = T)) %>%
+  select(Value, ..Country.Name, Indicator.Name) %>%
+  spread(Indicator.Name, Value) %>% na.omit() -> clusteringData
+
+clusteringData[,-1] = as.numeric(unlist(clusteringData[,-1]))
+clusteringData[,-1] = scale(clusteringData[,-1])
+
+AllClusts = kmeans(clusteringData[,-1], iter.max = 200, centers = 3)
+
+clusteringData$cluster = AllClusts$cluster
+
+data.frame(clusteringData$..Country.Name[clusteringData$cluster==1] )
+data.frame(clusteringData$..Country.Name[clusteringData$cluster==2] )
+data.frame(clusteringData$..Country.Name[clusteringData$cluster==3] )
+
+ggbiplot(prcomp(clusteringData[,-1], center=T, scale. = T), labels=clusteringData$..Country.Name, groups=as.factor(clusteringData$cluster) , size=30) + geom_point(size=.4) + theme_minimal()
+
+
+
+
+```
+
+
+
+
+## 10
+
+
+```{r , message=FALSE, warning=FALSE}
+
+allIndicators = c(EducationIndicators, healthIndicators, FinancialIndicators) 
+
+wdidata %>% filter(Indicator.Code %in% allIndicators)  %>% 
+  mutate(Value = rowMeans(select(., X2000:X2017), na.rm = T)) %>% 
+  select(..Country.Name, Indicator.Name, Value) %>% 
+  spread(Indicator.Name, Value) %>% na.omit() %>% as.data.frame()  -> lastQdat 
+
+dist = stats::dist(lastQdat[-1], method = "euclidean") 
+cutree(hclust(dist,method = "complete") ,k=3) 
+
+```
+
+
+
+
+
+## 11
+
+
+```{r , message=FALSE, warning=FALSE}
+
+wdidata %>% filter(Indicator.Code == "ER.H2O.INTR.PC" & ..Country.Name %in% c("World", "Iran, Islamic Rep.")) %>% 
+    gather(key = "year", value = "val", X1960:X2017) %>% 
+    hchart(hcaes(x = year, y = val, group = ..Country.Name), type = "line") %>% 
+    hc_title(text = "ER.H2O.INTR.PC") 
+
+```
+
+Renewable internal freshwater resources per capita (cubic meters) in iran is less than world mean which can explain the drought in some states
+
+
+```{r , message=FALSE, warning=FALSE}
+
+wdidata %>% filter(Indicator.Code == "SP.POP.GROW" & ..Country.Name %in% c("World", "Iran, Islamic Rep.")) %>% 
+    gather(key = "year", value = "val", X1960:X2017) %>% 
+    hchart(hcaes(x = year, y = val, group = ..Country.Name), type = "line") %>% 
+    hc_title(text = "SP.POP.GROW") 
+
+```
+
+population growth rate in iran was high but in the last 20 years it's become much less
+
+```{r , message=FALSE, warning=FALSE}
+
+wdidata %>% filter(Indicator.Code == "SP.POP.0014.TO.ZS" & ..Country.Name %in% c("World", "Iran, Islamic Rep.")) %>% 
+    gather(key = "year", value = "val", X1960:X2017) %>% 
+    hchart(hcaes(x = year, y = val, group = ..Country.Name), type = "line") %>% 
+    hc_title(text = "SP.POP.0014.TO.ZS") 
+
+```
+Under 14 population has decreased everywhere but more in Iran which shows the population mean age is increasing
