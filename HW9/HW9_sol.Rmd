@@ -1,0 +1,467 @@
+---
+title: 'Tenth Week: Primcipal Component Analysis and Factor Analysis'
+author: "Alaleh Ahmadian"
+date: "May 8, 2018"
+output:
+  prettydoc::html_pretty:
+    highlight: github
+    theme: HPSTR
+  rmarkdown::html_document: default
+  html_document:
+    df_print: paged
+---
+
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+
+## Libraries:
+
+```{r , message=FALSE, warning=FALSE}
+
+library(readr)
+library(dplyr)
+library(highcharter)
+library(ggplot2)
+library(tidyr)
+library(bit64)
+library(jpeg)
+library(stringr)
+
+```
+
+
+
+## Data:
+
+We read the data for indexes and constituents, then read each stock data separately and put them all in one data frame, for pca questions we create a dataframe with different placing
+
+```{r , message=FALSE, warning=FALSE}
+
+indexes <- read_csv("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/Data/ex9data/indexes.csv")
+constituents <- read.csv("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/Data/ex9data/constituents.csv", stringsAsFactors = F)
+
+names(indexes)
+names(constituents)
+
+#companies = data.frame(constituents[,1])
+All_Market_Data = data.frame()
+comps = data.frame("Companies"=list.files(path = "C:/Users/Alaleh/Desktop/Term8/Data_Analysis/Data/ex9data/stock_dfs/", pattern = "*.csv"), stringsAsFactors = F)
+
+for (i in 1:505) {
+  
+  #address=gsub(" ", "",paste("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/Data/ex9data/stock_dfs/",companies[i,1],".csv"))
+  address = gsub(" ", "",paste("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/Data/ex9data/stock_dfs/",comps[i,1]))
+  temp_dat = read.csv(address, stringsAsFactors = F)
+  temp_dat = temp_dat[order(temp_dat[,1]),]
+  company_dat = constituents[constituents$Symbol==substr(comps[i,1],0,nchar(comps[i,1])-4),]
+  if (nrow(company_dat)!=0){
+    temps = cbind("Symbol"=rep(company_dat[,1],dim(temp_dat)[1]),"Name"=rep(company_dat[,2],dim(temp_dat)[1]),"Sector"=rep(company_dat[,3],dim(temp_dat)[1]),temp_dat)
+    All_Market_Data = rbind(All_Market_Data, temps)
+  }
+  
+}
+
+files = list.files("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/Data/ex9data/stock_dfs/")
+names = str_replace(files, ".csv","")
+cur_file = read_csv(paste("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/Data/ex9data/stock_dfs/",files[1], sep = ""))
+
+cur_file %>% select(Date, Open) -> PCA_Data
+colnames(PCA_Data)[2] = names[1]
+
+for (i in 2:length(files))
+{
+  cur_file = read_csv(paste("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/Data/ex9data/stock_dfs/",files[i], sep = ""))
+  cur_file %>% select(Date, Open) -> cur_file
+  merge(PCA_Data, cur_file) -> PCA_Data
+  colnames(PCA_Data)[i+1] = names[i]
+}
+
+
+
+```
+
+
+
+## 1
+
+first 6 plots are for Sectors each showing how much profit they had (normally and percentage) in 1, 2 or 5 years. the second six plots are the same idea used on different symbols
+
+```{r , message=FALSE, warning=FALSE}
+
+
+profit_data = All_Market_Data
+profit_data$Date = as.Date(profit_data$Date, format="%Y-%m-%d")
+
+profit_data %>% group_by(Symbol, Name, Sector) %>% complete(Date = seq.Date(min(Date), max(Date), by="day")) -> profit_data
+profit_data %>% mutate(one_year = lead(Open, 365) - Open, one_year_percent = one_year*100/Open,
+                       two_years  = lead(Open, 365*2) - Open, two_year_percent = two_years*100/Open,
+                       five_years  = lead(Open, 365*5) - Open, five_year_percent = five_years*100/Open)-> profit_data
+
+profit_data %>% group_by(Sector) %>% arrange(-one_year) %>% top_n(n = 10 , wt = one_year) -> top_one_year
+hchart(top_one_year ,type = "column", title="Most profit in Sectors in one year", hcaes(x = Sector, y=one_year))  %>% hc_add_theme(hc_theme_economist())
+
+profit_data %>% group_by(Sector) %>% arrange(-one_year_percent) %>% top_n(n = 10 , wt = one_year_percent) -> top_one_year_percent
+hchart(top_one_year_percent ,type = "column", title="Most profit in Sectors in one year by percent", hcaes(x = Sector, y=one_year_percent))  %>% hc_add_theme(hc_theme_economist())
+
+profit_data %>% group_by(Sector) %>% arrange(-two_years) %>% top_n(n = 10 , wt = two_years) -> top_two_years
+hchart(top_two_years ,type = "column", title="Most profit in Sectors in two years", hcaes(x = Sector, y=two_years))  %>% hc_add_theme(hc_theme_economist())
+
+profit_data %>% group_by(Sector) %>% arrange(-two_year_percent) %>% top_n(n = 10 , wt = two_year_percent) -> top_two_year_percent
+hchart(top_two_year_percent ,type = "column", title="Most profit in Sectors in two years by percent", hcaes(x = Sector, y=two_year_percent))  %>% hc_add_theme(hc_theme_economist())
+
+profit_data %>% group_by(Sector) %>% arrange(-five_years) %>% top_n(n = 10 , wt = five_years) -> top_five_years
+hchart(top_five_years ,type = "column", title="Most profit in Sectors in five years", hcaes(x = Sector, y=five_years))  %>% hc_add_theme(hc_theme_economist())
+
+profit_data %>% group_by(Sector) %>% arrange(-five_year_percent) %>% top_n(n = 10 , wt = five_year_percent) -> top_five_year_percent
+hchart(top_five_year_percent ,type = "column", title="Most profit in Sectors in five years by percent", hcaes(x = Sector, y=five_year_percent))  %>% hc_add_theme(hc_theme_economist())
+
+profit_data %>% group_by(Symbol) %>% arrange(-one_year) %>% top_n(n = 10 , wt = one_year) -> top_one_year
+hchart(top_one_year ,type = "column", title="Most profit in Symbol in one year", hcaes(x = Symbol, y=one_year))  %>% hc_add_theme(hc_theme_economist())
+
+profit_data %>% group_by(Symbol) %>% arrange(-one_year_percent) %>% top_n(n = 10 , wt = one_year_percent) -> top_one_year_percent
+hchart(top_one_year_percent ,type = "column", title="Most profit in Symbol in one year by percent", hcaes(x = Symbol, y=one_year_percent))  %>% hc_add_theme(hc_theme_economist())
+
+profit_data %>% group_by(Symbol) %>% arrange(-two_years) %>% top_n(n = 10 , wt = two_years) -> top_two_years
+hchart(top_two_years ,type = "column", title="Most profit in Symbol in two years", hcaes(x = Symbol, y=two_years))  %>% hc_add_theme(hc_theme_economist())
+
+profit_data %>% group_by(Symbol) %>% arrange(-two_year_percent) %>% top_n(n = 10 , wt = two_year_percent) -> top_two_year_percent
+hchart(top_two_year_percent ,type = "column", title="Most profit in Symbol in two years by percent", hcaes(x = Symbol, y=two_year_percent))  %>% hc_add_theme(hc_theme_economist())
+
+profit_data %>% group_by(Symbol) %>% arrange(-five_years) %>% top_n(n = 10 , wt = five_years) -> top_five_years
+hchart(top_five_years ,type = "column", title="Most profit in Symbol in five years", hcaes(x = Symbol, y=five_years))  %>% hc_add_theme(hc_theme_economist())
+
+profit_data %>% group_by(Symbol) %>% arrange(-five_year_percent) %>% top_n(n = 10 , wt = five_year_percent) -> top_five_year_percent
+hchart(top_five_year_percent ,type = "column", title="Most profit in Symbol in five years by percent", hcaes(x = Symbol, y=five_year_percent))  %>% hc_add_theme(hc_theme_economist())
+
+
+```
+
+
+We see that in symbols "EQIX" and "GOOG" had the most profit (EQIX for percentage and GOOG overall)
+In setors IT is in the lead for overall and Real Estate in percentage.
+
+
+## 2
+
+We some the profit for each stock in each day of month and count how much profit each day has had overall.
+
+
+```{r , message=FALSE, warning=FALSE}
+
+date_trimmed_dat = All_Market_Data
+date_trimmed_dat$Date = paste(substr(date_trimmed_dat$Date, 9, 10))
+date_trimmed_dat %>% mutate("profit" = Close-Open) -> date_trimmed_dat
+date_trimmed_dat = aggregate(date_trimmed_dat$profit, by=list(Category=date_trimmed_dat$Date), FUN=sum)
+names(date_trimmed_dat) = c("Date","Profit")
+
+hchart(date_trimmed_dat ,type = "column", title="sum of profit in each day of month", hcaes(x = Date, y=Profit))  %>% hc_add_theme(hc_theme_economist())
+
+date_trimmed_dat = arrange(date_trimmed_dat,-Profit)
+date_trimmed_dat
+
+hchart(date_trimmed_dat ,type = "column", title="sum of profit in each day of month", hcaes(x = Date, y=Profit))  %>% hc_add_theme(hc_theme_economist())
+
+
+```
+As we see the overall profit on 13th is positive and close to high on the chart of sum of profits of each day, so it's not particularly a bad day for market
+
+
+
+## 3
+
+The stock market crash of 2008 occurred on September 29, 2008. The Dow Jones Industrial Average fell 777.68 points in intra-day trading. Until 2018, it was the largest point drop in history. It plummeted because Congress rejected the bank bailout bill. But the crash had been building for a long time.   
+On Thursday, October 9, the one-year anniversary of the Dow's peak, the cost of short term credit rose while there were heavy losses in the United States stock market; the Dow dropped below 8600, reaching a five-year low. It was the first time since August 2003 that the Dow closed below 9000; losses were moderate in Europe.[52] The following day, Friday, October 10, there were large losses in Asian and European markets [53] Yamato Life filed for bankruptcy. Beset by falling commodities prices, Russia's stock markets remained closed on October 10. The Russian Parliament passed a plan authorizing lending of $36 billion gained from global oil sales to banks which met creditworthiness requirements. Special attention is being paid to shoring up Rosselkhozbank, the bank which provides credit to the reviving agricultural sector. The amount of funds available is limited due to falling oil prices.[54][55] The government of the United States, as authorized by the Emergency Economic Stabilization Act, announced plans to infuse funds into banks by purchasing equity interests in them, in effect, partial nationalization, as done in Britain. The Treasury secretary Henry M. Paulson Jr. met Friday in Washington with world financial leaders.[56] A meeting of international financial leaders hosted by President Bush at the White House in Washington is planned on Saturday to attempt to coordinate global response to the financial crisis. The annual meetings of both the International Monetary Fund and World Bank was scheduled to be held in Washington over that weekend.[57]
+
+On Friday, October 10, stock markets crashed across Europe and Asia. London, Paris and Frankfurt dropped 10% within an hour of trading and again when Wall Street opened for trading. Global markets have experienced their worst weeks since 1987 and some indices, S&P 500, since the Wall Street Crash of 1929.[58]
+
+On October 10, within the first five minutes of the trading session on Wall Street, the Dow Jones Industrial Average plunged 697 points, falling below 7900 to its lowest level since March 17, 2003. Later in the afternoon, the Dow made violent swings back and forth across the breakeven line, toppling as much as 600 points and rising 322 points. The Dow ended the day losing only 128 points, or 1.49%. Trading on New York Stock Exchange closed for the week with the Dow at 8,451, down 1,874 points, or 18% for the week, and after 8 days of losses, 40% down from its record high October 9, 2007. Trading on Friday was marked by extreme volatility with a steep loss in the first few minutes followed by a rise into positive territory, closing down at the end of the day. In S&P100 some financial corporate showing signals upwards also.[59] President George W. Bush reassured investors that the government will solve the financial crisis gripping world economies.[60]
+
+The bonds of the bankrupt Lehman Brothers were auctioned on Friday, October 10. They sold for a little over 8 cents on the dollar. Many of the bonds of Lehman Brothers were insured with credit default swaps. Apprehension that payments to the holders of Lehman bonds might severely damage the firms or hedge funds which issued the swaps proved unfounded, despite anticipated claims estimated to be several hundred billion dollars, as countervailing claims canceled each other out resulting in only 5.2 billion dollars changing hands.[61][62][63]
+
+As meetings proceeded with global financial leaders in Washington on Saturday, October 11, the United States government announced a change in emphasis in its rescue efforts from buying illiquid assets to recapitalizing banks, including strong banks, in exchange for preferred equity; and purchase of mortgages by Fannie Mae and Freddie Mac. These remedies can be put into effect quicker than the prior plan which was estimated to take a month to set into operation.
+
+https://en.wikipedia.org/wiki/Global_financial_crisis_in_October_2008
+
+
+```{r , message=FALSE, warning=FALSE}
+
+turnover_data <- All_Market_Data
+turnover_data$Volume <- as.integer64(turnover_data$Volume)
+Turnover1_data <- aggregate(Volume~Date,turnover_data,sum)
+Turnover1_data <- Turnover1_data[order(-Turnover1_data$Volume),]
+Turnover1_data
+
+hchart(Turnover1_data ,type = "column", title="Turnover for each day", hcaes(x = Date, y=Volume))  %>% hc_add_theme(hc_theme_economist())
+
+
+```
+
+
+
+## 4
+
+We filter apple's data and then use the k-th index before it to get a linear regression. then we test it on our test data set and get an error value
+
+
+```{r , message=FALSE, warning=FALSE}
+
+Apple_stocks <- filter(All_Market_Data, Symbol=="AAPL")
+Apple_stocks = arrange(Apple_stocks,Date)
+
+errors = data.frame(0,0)
+names(errors) = c("index", "error")
+
+for (k in 1:300){
+  
+  Apple_stocks %>% mutate(KOpen=lag(Open, k), KHigh=lag(High, k), KLow=lag(Low, k),
+                          KClose=lag(Close, k), KVolume=lag(Volume, k)) -> cur_apple
+  
+  chooser = split(cur_apple, sample(1:5, nrow(cur_apple), replace=T))
+  d1 = chooser[1:4]
+  d2 = chooser[5]
+  train = do.call("rbind", d1)
+  test = do.call("rbind", d2)
+  
+  fit = lm(Open ~ KOpen + KHigh + KLow + KClose + KVolume, data = train)
+  test$PredictOpen = predict(fit, test)
+  
+  test %>% filter(!is.na(Open) & !is.na(PredictOpen)) %>%
+    mutate(err=abs(PredictOpen-Open)*100/Open) -> test
+  
+  cur_err = data.frame(k,mean(test$err))
+  names(cur_err) = c("index", "error")
+  
+  errors = rbind(errors,cur_err)
+  
+}
+
+errors = errors[-1,]
+hchart(errors ,type = "column", title="error for each K", hcaes(x = index, y=error))  %>% hc_add_theme(hc_theme_economist())
+
+errors %>% arrange(error,index) -> errors
+head(errors,10)
+
+
+```
+The Value for minimum error is 1 (This question would have made more sense using moving averages)
+
+
+## 5
+
+
+```{r , message=FALSE, warning=FALSE}
+
+pca = prcomp(PCA_Data[,-1], center=T, scale. = T)
+variances = pca$sdev^2
+variances = variances*100/sum(variances)
+cumulative_Variances = cumsum(variances)
+Cumulative_Variance_data = data.frame( variances, cumulative_Variances)
+id = 1:dim(Cumulative_Variance_data)[1]
+
+Cumulative_Variance_data %>% mutate("id"=id) %>%
+  hchart(hcaes(x=id, y=cumulative_Variances), type="column", name="Cumulative Variance Percentage") %>% hc_add_theme(hc_theme_economist())
+
+head(Cumulative_Variance_data,3)
+
+
+```
+
+
+80% are on the first 3 bars.
+
+
+
+
+## 6
+
+
+```{r , message=FALSE, warning=FALSE}
+
+pca_dat = All_Market_Data
+cur_pca = pca_dat %>% group_by(Date, Sector) %>% summarise(Open=mean(Open, na.rm = T)) %>% spread(Sector, Open)
+indexes <- read.csv("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/Data/ex9data/indexes.csv", stringsAsFactors = F)
+cur_pca = merge(cur_pca, indexes, by="Date")
+
+pca = prcomp(cur_pca[,-1], center=T, scale. = T)
+variances = pca$sdev^2
+variances = variances*100/sum(variances)
+cumulative_Variances = cumsum(variances)
+Cumulative_Variance_data = data.frame(variances, cumulative_Variances)
+
+id = 1:dim(Cumulative_Variance_data)[1]
+Cumulative_Variance_data %>% mutate("id"=id) %>%
+  hchart(hcaes(x=id, y=cumulative_Variances), type="column", name="Cumulative Variance Percentage") %>% hc_add_theme(hc_theme_economist())
+
+pca_d = as.data.frame(pca$x)
+ggplot(pca_d, aes(x=PC1, y=PC2, label=cur_pca$Date)) + geom_point() + geom_label(color="darkblue") + theme_minimal()
+
+biplot(pca, cex=0.75, expand=1)
+
+
+
+```
+
+
+
+
+## 7
+
+
+```{r , message=FALSE, warning=FALSE}
+
+Apple_stocks <- filter(All_Market_Data, Symbol=="AAPL")
+Apple_stocks = arrange(Apple_stocks,Date) %>% select(Open,High,Low,Close,Volume)
+
+pca = prcomp(Apple_stocks, center=T, scale. = T)
+pca = as.data.frame(pca$x)
+Apple_stocks$PC1 = pca$PC1
+
+K = 100
+Open_fit = 1:K
+PCA_fit  = 1:K
+
+for (k in 1:K){
+  
+  Apple_stocks %>% mutate(KOpen=lag(Open, k), KHigh=lag(High, k), KLow=lag(Low, k),
+                          KClose=lag(Close, k), KVolume=lag(Volume, k), KPCA=lag(PC1, k)) -> cur_apple
+  
+  chooser = split(cur_apple, sample(1:5, nrow(cur_apple), replace=T))
+  d1 = chooser[1:4]
+  d2 = chooser[5]
+  train = do.call("rbind", d1)
+  test = do.call("rbind", d2)
+  
+  fit1 = lm(Open ~ KOpen + KHigh + KLow + KClose + KVolume, data = train)
+  fit2 = lm(Open ~ KPCA, data = train)
+  test$PredictOpen = predict(fit1, test)
+  test$PredictPCA = predict(fit2, test)
+  
+  test %>% filter(!is.na(Open) & !is.na(PredictOpen)) %>%
+    mutate(err_Open=abs(PredictOpen-Open)*100/Open, err_PCA =abs(PredictPCA-Open)*100/Open) -> test
+  
+  Open_fit[k] = mean(test$err_Open)
+  PCA_fit[k]  = mean(test$err_PCA)
+  
+}
+
+open_df = data.frame(x=1:K, y=Open_fit)
+pca_df = data.frame(x=1:K, y=PCA_fit)
+
+highchart() %>% hc_add_series(name = "OHLCV", data = open_df) %>% 
+  hc_add_series(name = "PC1", data = pca_df) %>%
+  hc_xAxis(title = list(text = "k")) %>% hc_yAxis(title = list(text = "Error percent")) %>%
+  hc_add_theme(hc_theme_economist())
+
+
+
+
+```
+
+They're pretty much the same
+
+
+
+
+## 8
+
+
+```{r , message=FALSE, warning=FALSE}
+
+indexes <- read_csv("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/Data/ex9data/indexes.csv")
+
+n_indexes = indexes %>% select(Date, SP500) %>%
+  complete(Date = seq.Date(min(Date), max(Date), by="month")) %>%
+  mutate(return_percent_per_month= (lead(SP500, 1)-SP500)*100/SP500)
+
+hchart(n_indexes$return_percent_per_month, type="column", name="Return percent per month") %>% hc_add_theme(hc_theme_economist())
+
+qqnorm(n_indexes$return_percent_per_month)
+qqline(n_indexes$return_percent_per_month, col = 4)
+shapiro.test(n_indexes$return_percent_per_month)
+
+
+
+```
+
+It's clearly not normal
+
+
+
+
+## 9
+
+
+```{r , message=FALSE, warning=FALSE}
+
+plot_jpeg = function(path, add=FALSE)
+{
+  require('jpeg')
+  jpg = readJPEG(path, native=T) # read the file
+  res = dim(jpg)[2:1] # get the resolution, [x, y]
+  if (!add) # initialize an empty plot area if add==FALSE
+    plot(1,1,xlim=c(1,res[1]),ylim=c(1,res[2]),asp=1,type='n',xaxs='i',yaxs='i',xaxt='n',yaxt='n',xlab='',ylab='',bty='n')
+  rasterImage(jpg,1,1,res[1],res[2])
+}
+
+stock <- readJPEG("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/Data/ex9data/stock.jpg")
+
+photo_compress = data.frame(0,0)
+names(photo_compress) = c("index", "size")
+r <- stock[,,1]
+g <- stock[,,2]
+b <- stock[,,3]
+
+stock.r.pca <- prcomp(r, center = FALSE)
+stock.g.pca <- prcomp(g, center = FALSE)
+stock.b.pca <- prcomp(b, center = FALSE)
+
+rgb.pca <- list(stock.r.pca, stock.g.pca, stock.b.pca)
+
+for (i in 1:400) {
+  pca.img <- sapply(rgb.pca, function(j) {compressed.img <- j$x[,1:i] %*% t(j$rotation[,1:i])}, simplify = 'array')
+  writeJPEG(pca.img, paste('stock_compressed_', round(i,0), '_components.jpg', sep = ''))
+  this_size = format(file.info(gsub(" ","",paste('C:/Users/Alaleh/Desktop/Term8/Data_Analysis/hw_sol/stock_compressed_',i, '_components.jpg')))$size, units = "KB")
+  
+  cur_photo_comp = data.frame(i,this_size)
+  names(cur_photo_comp) = c("index", "size")
+  photo_compress = rbind(photo_compress,cur_photo_comp)
+
+  if (i%%20==0){
+    plot_jpeg(gsub(" ","",paste('C:/Users/Alaleh/Desktop/Term8/Data_Analysis/hw_sol/stock_compressed_',round(i,0), '_components.jpg')))
+  }
+}
+
+photo_compress = photo_compress[-1,]
+
+
+ggplot(photo_compress, aes(x=index, y=size)) + geom_col() + labs(y = "size", x = "P") + theme_bw()
+
+
+photo_compress = photo_compress %>% arrange(size)
+head(photo_compress,50)
+
+
+```
+
+
+
+
+
+## 10
+
+
+Build a Stock Price Forecasting Model - These models are used to predict price of a stock or an index for a given time period in future. We have stock price of any of the publicly listed companies such as Apple, Microsoft, Facebook, Google from Yahoo finance. Such data is known as uni-variate time series data. So we can use ARIMA (AR, MA, ARMA, ARIMA) class of models or use Exponential Smoothing models.
+
+Portfolio Optimization Problem - Assume we are working as an adviser to a high net worth individual who wants to diversify his 1 million cash in 20 different stocks. How would we advise him? we can find 20 least correlated stocks (that mitigates the risk) using correlation matrix and use optimization algorithms (OR algos) to find out how we would distribute 1million among these 20 different stocks.
+
+Revenue Forecasting - Revenue forecasting can be done using statistical analysis as well (apart from the conventional accounting practices that companies follow). You can take data for factors affecting revenue of a company or a group of companies for a set of periods of equal interval (monthly, Quarterly, Half year, annual) to build a regression model. make sure you correct for problem of auto-correlation as the data has time series component and the errors are likely to be correlated (that violates assumptions of regression analysis)
+
+Seasonal growth - We can can seasonally adjust the series by estimating the seasonal component, and subtracting it from the original time series. We can see that time series simply consists of the trend and random components.
+
+Correlated Data - We could look for correlations between different parts of a sector (see if all companies rise and fall together or if one's success means others' loss)
+
