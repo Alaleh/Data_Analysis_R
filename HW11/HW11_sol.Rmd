@@ -1,0 +1,392 @@
+---
+title: 'Create Map - Earthquake Analysis'
+author: "Alaleh Ahmadian"
+date: "May 8, 2018"
+output:
+  prettydoc::html_pretty:
+    highlight: github
+    theme: HPSTR
+  rmarkdown::html_document: default
+  html_document:
+    df_print: paged
+---
+
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+
+## Libraries:
+
+```{r , message=FALSE, warning=FALSE}
+
+library(readr)
+library(dplyr)
+library(highcharter)
+library(ggplot2)
+library(tidyr)
+library(plotly)
+library(readtext)
+library(readr)
+library(stringr)
+library(magrittr)
+library(widgetframe)
+library(rworldmap)
+library(ggthemes)
+library(ggmap)
+library(gganimate)
+library(animation)
+library(gapminder)
+library(sp)
+library(mapdata)
+library(maps)
+library(rgeos)
+library(maptools)
+
+```
+
+
+## Data:
+
+changes daster.txt to disaster.csv to be able to read the data better 
+
+```{r , message=FALSE, warning=FALSE}
+
+hist_data = readRDS("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/Data/earthquake/historical_web_data_26112015.rds")
+iran_earthquake = readRDS("C:/Users/Alaleh/Desktop/Term8/Data_Analysis/Data/earthquake/iran_earthquake.rds")
+disaster = read.csv(file="C:/Users/Alaleh/Desktop/Term8/Data_Analysis/HW_sol/disaster.csv", header=T,  row.names=NULL)
+colnames(disaster) <- c(colnames(disaster)[-1],"x")
+disaster$x <- NULL
+worldwide = read.csv(file="C:/Users/Alaleh/Desktop/Term8/Data_Analysis/Data/earthquake/worldwide.csv", header=T,  row.names=NULL)
+
+
+```
+
+
+
+## 1
+
+We omit data from Afghanistan, Azerbaijan and Pakistan because they're not in iran and also have too many outliers which can make the plot unreadable (to see the full plot with these countries you just have to comment the 3rd line)
+
+```{r , message=FALSE, warning=FALSE}
+
+colors <- c('#4AC6B7', '#1972A4', '#965F8A', '#FF7070', '#C61951')
+
+foreigns = c("Afghanistan","Azerbaijan","Pakistan")
+data_3D = hist_data[!(hist_data$Province %in% foreigns),]
+
+plot_ly(data_3D, x = ~Latitude, y = ~Longitude, z = ~Depth, color = ~City, size = ~Magnitude, colors = colors,
+             marker = list(symbol = 'circle', sizemode = 'diameter'), sizes = c(1.5,40),
+             text = ~paste('City:', City, '<br>Magnitude:', Magnitude, '<br>Province:', Province)) %>% layout(title = 'Place and depth of earthquake based on its magnitude',
+         scene = list(xaxis = list(title = 'Latitude',
+                      gridcolor = 'rgb(255, 255, 255)',
+                      zerolinewidth = 1,ticklen = 5,
+                      gridwidth = 2),
+               yaxis = list(title = 'Longitude',
+                      gridcolor = 'rgb(255, 255, 255)',
+                      zerolinewidth = 1,
+                      ticklen = 5,
+                      gridwith = 2),
+               zaxis = list(title = 'Death',
+                            gridcolor = 'rgb(255, 255, 255)',
+                            zerolinewidth = 1,
+                            ticklen = 5,
+                            gridwith = 2)),
+         paper_bgcolor = 'rgb(243, 243, 243)',
+         plot_bgcolor = 'rgb(243, 243, 243)')
+
+
+
+```
+
+
+
+
+
+## 2
+
+
+```{r , message=FALSE, warning=FALSE}
+
+sitsunami = disaster
+
+sitsunami$DAY[is.na(sitsunami$DAY)] = 1
+sitsunami$MONTH[is.na(sitsunami$MONTH)] = 1
+sitsunami$HOUR[is.na(sitsunami$HOUR)] = 1
+sitsunami$MINUTE[is.na(sitsunami$MINUTE)] = 1
+sitsunami$SECOND[is.na(sitsunami$SECOND)] = 1
+sitsunami$YEAR[is.na(sitsunami$YEAR)] = 1
+sitsunami$date <- as.Date(with(sitsunami, paste(YEAR, MONTH, DAY,sep="-")), "%Y-%m-%d")
+
+sitsunami = sitsunami %>% filter(FLAG_TSUNAMI=="Tsu") %>%  rename(year=YEAR, month=MONTH, day=DAY, lat = LATITUDE,lon = LONGITUDE, z = INTENSITY,name = LOCATION_NAME) %>% select(lat, lon, z, name, date, year, month, day) %>% na.omit()
+
+sitsunami$lat = as.numeric(as.character(sitsunami$lat))
+sitsunami$lon = as.numeric(as.character(sitsunami$lon))
+
+sitsunami %>% arrange(year) -> sitsunami
+
+world <- ggplot() +
+  borders("world", colour = "gray95", fill = "gray80") +
+  theme_map() 
+
+map <- world + geom_point(data = sitsunami, aes(x = lon, y = lat, size = z, frame = date, cumulative = TRUE),colour = 'purple', alpha = .5) + scale_size_continuous(range = c(1, 8), breaks = c(250, 500, 750, 1000)) + labs(size = 'Followers')  + coord_fixed(1.3)  + theme_map()
+
+gganimate(map, interval = .07, ani.width=800, ani.height=600, "tsunamiss.gif", title_frame = T)
+
+
+```
+
+
+
+
+## 3
+
+```{r , message=FALSE, warning=FALSE}
+
+si_earthquakes = iran_earthquake %>% rename(lat = Lat,lon = Long, z = Mag,name = OriginTime) %>% select(lat, lon, z, name) %>% na.omit()
+
+IRMap = get_map(geocode("Iran"),zoom = 5)
+
+ggmap(IRMap) + geom_density2d(data = si_earthquakes, aes(x = lon, y = lat)) + stat_density2d(data = si_earthquakes, aes(x = lon, y = lat, fill = ..level.., alpha = ..level..), size = 0.01, bins = 16, geom = 'polygon') + scale_fill_gradient(low = "blue", high = "red") + scale_alpha(range = c(0.00, 0.25), guide = FALSE)  + theme(legend.position = "none", axis.title = element_blank(), text = element_text(size = 12))
+
+
+```
+
+
+
+
+
+
+## 4
+
+Assuming Poisson distribution, a common choice of distribution for count data, the four earthquakes in ten years lead to maximum likelihood estimate of rate of earthquakes per year
+
+??_hat = (???k_i) / n = 4/10
+
+where k_i is the number of earthquakes in the i-th year. This leads to estimating probability of any earthquake in a single year as
+
+P = Pr(K???1) = 1 ??? Pr(K=0) = 1 ??? (e^(?????)) ??^k / k!
+
+Assuming independence between years, the probability of any earthquake in five years is equal to
+
+1 ??? (Pr(K = 0))^5
+
+(Pr(K = 0))^5 == no earthquake in 5 years
+
+We want the opposite of the above 
+
+Notice that this result is consistent with much simpler approach: observe that, according to your data, probability of observing a year with any earthquake is 3/10, so probability of observing at least one such year in five is 1???(1???3/10)^5
+
+We could also use the gutenberg-richter law but the data didn't suffice for a good answer
+
+```{r , message=FALSE, warning=FALSE}
+
+iran_yearwise_eq = iran_earthquake %>% filter (Mag>=7)
+iran_yearwise_eq$OriginTime = substr(iran_yearwise_eq$OriginTime,0,4)
+iran_yearwise_eq %>% group_by(OriginTime) %>% summarise(count = n()) -> count_eq
+count_eq
+
+landa_hat = sum(count_eq$count)/10
+P = 1 - exp(-landa_hat)
+ans = 1 - (1-P)^5
+ans
+
+hchart(count_eq ,type = "column", title="Number of earthquakes in each year", hcaes(x = OriginTime, y=count))  %>% hc_add_theme(hc_theme_google())
+
+```
+
+
+## 5
+
+
+
+```{r , message=FALSE, warning=FALSE}
+
+world_ts_data = disaster %>% select(year = YEAR, country = COUNTRY, killed = DEATHS) %>% na.omit()  %>% group_by(country) %>% summarise(allDied = sum(as.integer(killed)), meanDead = mean(as.integer(killed)))
+
+get_data_from_map(download_map_data("custom/world-eckert3")) %>% select(code = `hc-key`, country = name) %>% mutate(country = toupper(country)) -> map
+
+world_ts_data$country = as.character(world_ts_data$country)
+world_ts_data[world_ts_data == "USA"] = "UNITED STATES OF AMERICA"
+
+all_map = left_join(map, world_ts_data) 
+
+hcmap("custom/world-eckert3", 
+      data = all_map, value = "meanDead", 
+      joinBy = c("hc-key", "code"), name = "Mean Deaths", 
+      borderColor = "blue", borderWidth = 0.2) %>% 
+  hc_mapNavigation(enabled = TRUE) %>% hc_add_theme(hc_theme_google())
+
+hcmap("custom/world-eckert3", 
+      data = all_map, value = "allDied", 
+      joinBy = c("hc-key", "code"), name = "Total Deaths", 
+      borderColor = "blue", borderWidth = 0.2) %>% 
+  hc_mapNavigation(enabled = TRUE) %>% hc_add_theme(hc_theme_google())
+
+```
+
+
+
+## 6
+
+
+```{r , message=FALSE, warning=FALSE}
+
+pred_data = disaster
+
+pred_data = pred_data %>%  rename(lat = LATITUDE,lon = LONGITUDE, z = INTENSITY, depth = FOCAL_DEPTH, killed = TOTAL_DEATHS) %>% select(lat, lon, z, depth, killed)
+
+pred_data$lat = as.numeric(as.character(pred_data$lat))
+pred_data$lon = as.numeric(as.character(pred_data$lon))
+
+fit = lm(killed~. , data = pred_data)
+summary(fit)
+
+fit2 = lm(killed ~ z + I(lat)^2 + I(lon)^2 + I(depth)^3 , data = pred_data)
+summary(fit2)
+
+```
+
+We see that both predictions have a high error so we can't get a good prediction
+
+
+## 7
+
+```{r , message=FALSE, warning=FALSE}
+
+worldwide %>% select(time, mag, place) %>% na.omit() %>% group_by(place,time) %>% filter(n()>1) -> time_place
+
+time_place$place = as.character(time_place$place)
+time_place$date = as.Date(str_sub(time_place$time,1,10),format="%Y-%m-%d")
+time_place$time = as.character(str_sub(time_place$time,12,19))
+
+foreData = cbind(time_place$mag[-length(time_place)], time_place$mag[-1])
+foreData = data.frame(foreData[c(TRUE,FALSE),])
+names(foreData) = c("foreshock","mainquake")
+
+fit = lm(mainquake~foreshock, foreData)
+summary(fit)
+
+```
+
+
+Not all earthquakes have foreshocks and some of thm have aftershocks, finding out which one is which needs much more data than we have now (since we can only use data from the same place on each day) and that's probably why we still can't foretell earthquakes.
+
+## 8
+
+
+```{r , message=FALSE, warning=FALSE}
+
+depth_intensity_data = worldwide %>% select(mag,depth) %>% na.omit
+cor.test(depth_intensity_data$mag, depth_intensity_data$depth)
+
+```
+The P-value is very low so we reject H0 and  So we can reject the null hypothesis and conclude that there might be a correlation between depth and magnitude
+
+## 9
+
+
+```{r , message=FALSE, warning=FALSE}
+
+intensity_mean_data = worldwide %>% filter(type=="earthquake")
+intensity_mean_data$time = str_sub(intensity_mean_data$time,0,4)
+intensity_mean_data$place = as.character(intensity_mean_data$place)
+
+intensity_mean_data$country = intensity_mean_data$place
+
+places = as.integer(regexpr("\\,[^\\,]*$", intensity_mean_data$country))
+intensity_mean_data$country[str_detect(intensity_mean_data$country,",")] = trimws(str_sub(intensity_mean_data$country, places+1))
+
+places = as.integer(regexpr(':', intensity_mean_data$country))
+intensity_mean_data$country[str_detect(intensity_mean_data$country,":")] = str_sub(intensity_mean_data$country,1,places-1)
+
+us_states = c("Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut","Delaware","Florida","Georgia","Hawaii","Idaho","Illinois","Indiana","Iowa","Kansas","Kentucky","Louisiana","Maine","Maryland","Massachusetts","Michigan","Minnesota","Mississippi","Missouri","Montana","Nebraska","Nevada","New Hampshire","New Jersey","New Mexico","New York","North Carolina","North Dakota","Ohio","Oklahoma","Oregon","Pennsylvania","Rhode Island","South Carolina","South Dakota","Tennessee","Texas","Utah","Vermont","Virginia","Washington","West Virginia","Wisconsin","Wyoming")
+
+intensity_mean_data$country[intensity_mean_data$country %in% us_states] = "United States Of America"
+
+intensity_mean_data$country = chartr("a-z", "A-Z",intensity_mean_data$country)
+
+country_intensity = intensity_mean_data %>% group_by(country) %>% summarise(meanMag = mean(mag), count=n())
+
+meanMap = left_join(map, country_intensity) 
+
+hcmap("custom/world-eckert3", 
+      data = meanMap, value = "meanMag", 
+      joinBy = c("hc-key", "code"), name = "Mean Magnitude for all data", 
+      borderColor = "blue", borderWidth = 0.2) %>% 
+  hc_mapNavigation(enabled = TRUE) %>% hc_add_theme(hc_theme_google())
+
+
+country_intensity2 = intensity_mean_data %>% group_by(country,time) %>% summarise(meanMag = mean(mag), count=n()) %>% filter(time==2015)
+
+meanMap2 = left_join(map, country_intensity2) 
+
+hcmap("custom/world-eckert3", 
+      data = meanMap2, value = "meanMag", 
+      joinBy = c("hc-key", "code"), name = "Mean Magnitude for year 2015", 
+      borderColor = "blue", borderWidth = 0.2) %>% 
+  hc_mapNavigation(enabled = TRUE) %>% hc_add_theme(hc_theme_google())
+
+
+country_intensity3 = intensity_mean_data %>% group_by(country,time) %>% summarise(meanMag = mean(mag), count=n()) %>% filter(time==2014)
+
+meanMap3 = left_join(map, country_intensity3) 
+
+hcmap("custom/world-eckert3", 
+      data = meanMap3, value = "meanMag", 
+      joinBy = c("hc-key", "code"), name = "Mean Magnitude for year 2014", 
+      borderColor = "blue", borderWidth = 0.2) %>% 
+  hc_mapNavigation(enabled = TRUE) %>% hc_add_theme(hc_theme_google())
+
+```
+
+Looking at the plot we see that many US allies and even US itsself has higher earthquake rates than Iran and Iran doesn't have a particularly high rate in accordance to them, so we can't prove Haarp theory
+
+
+
+
+## 10
+
+find the biggest magnitude for each of the types
+
+```{r , message=FALSE, warning=FALSE}
+
+worldwide %>% group_by(type) %>% summarise(max_mag = max(mag))-> maxes
+maxes
+
+```
+
+
+Find the place with most accidents
+
+```{r , message=FALSE, warning=FALSE}
+
+worldwide %>% group_by(place) %>% summarise(count = n()) %>% arrange(-count) %>% head(10)-> maxes
+maxes
+
+```
+
+
+
+Number of accidents for each type
+
+```{r , message=FALSE, warning=FALSE}
+
+worldwide %>% group_by(type) %>% summarise(count = n()) %>% arrange(-count) -> nums
+nums
+
+```
+
+
+
+Number of people killed in each country
+
+```{r , message=FALSE, warning=FALSE}
+
+disaster %>% group_by(COUNTRY) %>% summarise(killed = sum(TOTAL_DEATHS)) %>% arrange(-killed) -> deaths
+deaths
+
+```
