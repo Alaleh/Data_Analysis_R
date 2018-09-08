@@ -1,0 +1,404 @@
+---
+title: 'Eighth Week: Text Analysis in R'
+author: "Alaleh Ahmadian"
+date: "May 1, 2018"
+output:
+  prettydoc::html_pretty:
+    highlight: github
+    theme: HPSTR
+  rmarkdown::html_document: default
+  html_document:
+    df_print: paged
+---
+
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+
+## Libraries:
+
+```{r , message=FALSE, warning=FALSE}
+
+library(tm)
+library(wordcloud)
+library(stringr)
+library(gutenbergr)
+library(tidytext)
+library(dplyr)
+library(ggplot2)
+library(ggthemes)
+library(highcharter)
+library(magrittr)
+library(wordcloud2)
+library(tidyr)
+library(syuzhet)
+library(readr)
+library(stringr)
+
+```
+
+
+
+## Data:
+
+```{r , message=FALSE, warning=FALSE}
+
+dickens_works = gutenberg_metadata %>% filter(author == "Dickens, Charles" & language=="en" & has_text==TRUE & !is.na(gutenberg_bookshelf))
+ATaleofTwoCities = gutenberg_download(98)
+TheMysteryofEdwinDrood =gutenberg_download(564)
+ThePickwickPapers = gutenberg_download(580)
+TheOldCuriosityShop = gutenberg_download(700)
+OliverTwist = gutenberg_download(730)
+DavidCopperfield =gutenberg_download(766)
+HardTimes =gutenberg_download(786)
+DombeyandSon = gutenberg_download(821)
+OurMutualFriend = gutenberg_download(883)
+BarnabyRudge = gutenberg_download(917)
+NicholasNickleby = gutenberg_download(967)
+MartinChuzzlewit = gutenberg_download(968)
+LittleDorrit = gutenberg_download(963)
+BleakHouse = gutenberg_download(1023)
+GreatExpectations = gutenberg_download(1400)
+LaMisrables = rbind(gutenberg_download(48731),gutenberg_download(48732),gutenberg_download(48733),gutenberg_download(48734),gutenberg_download(48735))
+dickens_texts = gutenberg_download(c(98,564,580,700,730,766,786,821,883,917,967,968,963,1023,1400,48731,48732,48733,48734,48735))
+
+```
+
+
+
+## 1
+
+we make a data frame with each word in a row and then remove stop words (which we have in the package) then count each word and find the most used ones
+
+```{r , message=FALSE, warning=FALSE}
+
+dickens_tidied <- dickens_texts %>% unnest_tokens(word, text) %>% anti_join(stop_words)
+word_count_dickens <- dickens_tidied %>% count(word, sort = TRUE)
+mostly_used <- head(word_count_dickens,20)
+hchart(mostly_used ,type = "column", title="Counts of Mostly Used", hcaes(x = word, y=n))  %>% hc_add_theme(hc_theme_google())
+
+```
+
+
+
+## 2
+
+the package wordcloud2 has some issues and sometimes doesn't show the photo
+https://github.com/Lchiffon/wordcloud2/issues/12
+
+```{r , message=FALSE, warning=FALSE}
+
+#word_count_dickens %>% with(wordcloud(word, n, max.words = 200))
+most_words = data.frame(head(word_count_dickens,200))
+wordcloud2(head(most_words,100), size = 0.3, shape = 'star')
+wordcloud2(head(most_words,100), figPath="dickens1_1.png" , size = .2, color = "black")
+
+
+```
+
+<div align="center">
+<img  src="/Users/Alaleh/Desktop/Rplot02.png">
+</div>
+
+
+## 3
+
+We can use the Find_Character function below which gives us the most words starting with a capital letter (since names always start with capitals) (since our stop words are all in small letters and we dn't want to un-capitalize the main text we change the first character in stop words to capital and remve them)
+
+```{r , message=FALSE, warning=FALSE}
+
+capitalize = function(x) paste0(toupper(substr(x, 1, 1)), tolower(substring(x, 2)))
+
+my_stop_words <- stop_words
+my_stop_words$word <- capitalize(my_stop_words$word)
+
+Find_Characters <- function(book){
+  Tidied_book <- book  %>% unnest_tokens(word, text, to_lower = F) %>% anti_join(my_stop_words) %>% anti_join(stop_words)
+  book_Names <- Tidied_book[grep('[A-Z][a-z]*', Tidied_book$word),] %>% count(word,sort=T)
+  hchart(head(book_Names,20) ,type = "column", title="Names in book", hcaes(x = word, y=n))  %>% hc_add_theme(hc_theme_google())
+}
+
+```
+
+
+
+```{r , message=FALSE, warning=FALSE}
+
+Find_Characters(ATaleofTwoCities)
+Find_Characters(TheMysteryofEdwinDrood)
+Find_Characters(ThePickwickPapers)
+Find_Characters(TheOldCuriosityShop)
+Find_Characters(OliverTwist)
+Find_Characters(DavidCopperfield)
+Find_Characters(HardTimes)
+Find_Characters(DombeyandSon)
+Find_Characters(OurMutualFriend)
+Find_Characters(BarnabyRudge)
+Find_Characters(NicholasNickleby)
+Find_Characters(MartinChuzzlewit)
+Find_Characters(LittleDorrit)
+Find_Characters(BleakHouse)
+Find_Characters(GreatExpectations)
+Find_Characters(LaMisrables)
+
+
+
+
+```
+
+
+
+
+
+
+
+## 4
+
+for each book we have a barplot with 40 bars showing the most 20 negative and positive words used by the author and another barplot to show how dominating each sentiment is, in Dickens' books! for all of them trust is the most dominating sentiment.
+
+```{r , message=FALSE, warning=FALSE}
+
+Sentiment_calculate <- function(book){
+
+  words_book <- book %>% unnest_tokens(word, text) %>% anti_join(stop_words)
+
+  overall_sentiment_book <- words_book %>% inner_join(get_sentiments("nrc")) %>% count(sentiment,sort = T) %>% mutate(sentiment = reorder(sentiment,n))
+  overall_sentiment_book <- overall_sentiment_book[which(overall_sentiment_book$sentiment!="positive" & overall_sentiment_book$sentiment!="negative"),]
+  
+  sentiments = c("trust", "anticipation", "joy", "fear", "sadness", "anger", "disgust", "surprise")
+  ggplot(overall_sentiment_book ,type = "column", title="Sentiments' in book", aes(x = sentiment, y=n, fill = sentiments)) + geom_bar(legend = F,stat = 'identity') + ggtitle('Sentiment in book') +
+  coord_flip() + scale_fill_manual( values=c("black","red","green3", "blue", "cyan", "magenta", "yellow", "grey"))
+  
+}
+
+top_sentimental_words <- function(book){
+
+  words_book <- book %>% unnest_tokens(word, text) %>% anti_join(stop_words)
+
+  nrc_word_counts_book <- words_book %>% inner_join(get_sentiments("nrc"))
+  nrc_word_counts_book <- count(nrc_word_counts_book,word, sentiment, sort = TRUE)
+  nrc_word_counts_book <- nrc_word_counts_book %>% group_by(sentiment) %>% filter(sentiment=="negative" || sentiment=="positive") %>% top_n(20) %>% ungroup() %>% mutate(word = reorder(word, n))
+
+  ggplot(nrc_word_counts_book, aes(word, n, fill = sentiment)) + geom_col() + labs(y = "Words' sentiments", x = "words")  + coord_flip()
+}
+
+```
+
+```{r , message=FALSE, warning=FALSE}
+
+Sentiment_calculate(ATaleofTwoCities)
+top_sentimental_words(ATaleofTwoCities)
+Sentiment_calculate(TheMysteryofEdwinDrood)
+top_sentimental_words(TheMysteryofEdwinDrood)
+Sentiment_calculate(ThePickwickPapers)
+top_sentimental_words(ThePickwickPapers)
+Sentiment_calculate(TheOldCuriosityShop)
+top_sentimental_words(TheOldCuriosityShop)
+Sentiment_calculate(OliverTwist)
+top_sentimental_words(OliverTwist)
+Sentiment_calculate(DavidCopperfield)
+top_sentimental_words(DavidCopperfield)
+Sentiment_calculate(HardTimes)
+top_sentimental_words(HardTimes)
+Sentiment_calculate(DombeyandSon)
+top_sentimental_words(DombeyandSon)
+Sentiment_calculate(OurMutualFriend)
+top_sentimental_words(OurMutualFriend)
+Sentiment_calculate(BarnabyRudge)
+top_sentimental_words(BarnabyRudge)
+Sentiment_calculate(NicholasNickleby)
+top_sentimental_words(NicholasNickleby)
+Sentiment_calculate(MartinChuzzlewit)
+top_sentimental_words(MartinChuzzlewit)
+Sentiment_calculate(LittleDorrit)
+top_sentimental_words(LittleDorrit)
+Sentiment_calculate(BleakHouse)
+top_sentimental_words(BleakHouse)
+Sentiment_calculate(GreatExpectations)
+top_sentimental_words(GreatExpectations)
+
+
+```
+
+
+## 5
+
+we arrange the book and turn it into 200 parts (each with around 300 words) we add the positive and negative sentiment of words (actually adding -negative sentiments) and get a score of pos/neg feeling for each type. Dickens' La Miserables is mostly negtive (since the number of parts is small it's clearly seen, if we make smaller parts with less words it would show more positive parts)
+
+```{r , message=FALSE, warning=FALSE}
+
+tidy_LaMisrables <- LaMisrables %>% mutate(linenumber = row_number(),
+         chapter = cumsum(str_detect(text, regex("^chapter [\\divxlc]", ignore_case = TRUE)))) %>%
+  ungroup() %>% unnest_tokens(word, text) %>% anti_join(stop_words)
+
+LaMiserables_to_plot <- tidy_LaMisrables %>% inner_join(get_sentiments("bing")) %>%
+  count( index = linenumber %/% 293, sentiment) %>%
+  spread(sentiment, n, fill = 0) %>%
+  mutate(sentiment = positive - negative) 
+
+ggplot(data = LaMiserables_to_plot, aes(x = index, y = sentiment)) +
+        geom_bar(aes(fill = sentiment>0),stat = 'identity', position = position_dodge()) + 
+        ylab("Sentiment") + 
+        ggtitle("Positive and Negative Sentiment in La Miserables") +
+        scale_color_manual(values = c("orange", "blue")) +
+        scale_fill_manual(values = c("orange", "blue"),guide = FALSE, breaks = c(TRUE, FALSE))
+
+
+```
+
+
+
+## 6
+
+using unnest tokens we get the 2-grams and count them in the book
+
+
+```{r , message=FALSE, warning=FALSE}
+
+bigram_calculate <- function(book){
+  
+  book_bigrams <- book %>% unnest_tokens(bigram, text, token = "ngrams", n = 2)
+  book_separated <- book_bigrams %>% separate(bigram, c("word1", "word2"), sep=" ")
+  book_bigram_filtered <- book_separated %>% filter(!word1 %in% stop_words$word) %>% filter(!word2 %in% stop_words$word)
+  book_bigram_counts <- book_bigram_filtered %>% count(word1, word2, sort = TRUE)
+  book_bigrams_united <- book_bigram_filtered %>% unite(bigram, word1, word2, sep = " ")
+  book_bigrams <- book_bigrams_united %>% count(bigram, sort=T)
+  book_bigrams <- book_bigrams %>% filter(n>3)
+
+  hchart(head(book_bigrams,30) ,type = "column", title="Most common bigrams", hcaes(x = bigram, y=n))  %>% hc_add_theme(hc_theme_google())
+
+}
+```
+
+
+```{r , message=FALSE, warning=FALSE}
+
+bigram_calculate(ATaleofTwoCities)
+bigram_calculate(TheMysteryofEdwinDrood)
+bigram_calculate(ThePickwickPapers)
+bigram_calculate(TheOldCuriosityShop)
+bigram_calculate(OliverTwist)
+bigram_calculate(DavidCopperfield)
+bigram_calculate(HardTimes)
+bigram_calculate(DombeyandSon)
+bigram_calculate(OurMutualFriend)
+bigram_calculate(BarnabyRudge)
+bigram_calculate(NicholasNickleby)
+bigram_calculate(MartinChuzzlewit)
+bigram_calculate(LittleDorrit)
+bigram_calculate(BleakHouse)
+bigram_calculate(GreatExpectations)
+
+```
+
+
+
+## 7
+
+we choose the bigrams which have the first word as he or she (a verb always comes after these two) and count them separatly
+
+
+```{r , message=FALSE, warning=FALSE}
+
+dickens_bigrams <- dickens_texts %>% unnest_tokens(bigram, text, token = "ngrams", n = 2)
+dickens_separated <- dickens_bigrams %>% separate(bigram, c("word1", "word2"), sep=" ")
+dickens_bigram_he_filtered <- dickens_separated  %>% filter(word1=="he")
+dickens_bigram_she_filtered <- dickens_separated  %>% filter(word1=="she")
+dickens_bigrams_he_united <- dickens_bigram_he_filtered %>% count(word1, word2, sort = TRUE)  %>% unite(bigram, word1, word2, sep = " ")
+dickens_bigrams_she_united <- dickens_bigram_she_filtered %>% count(word1, word2, sort = TRUE)  %>% unite(bigram, word1, word2, sep = " ")
+
+hchart(head(dickens_bigrams_he_united,30) ,type = "column", title="Most common bigrams", hcaes(x = bigram, y=n))  %>% hc_add_theme(hc_theme_google())
+hchart(head(dickens_bigrams_she_united,30) ,type = "column", title="Most common bigrams", hcaes(x = bigram, y=n))  %>% hc_add_theme(hc_theme_google())
+
+```
+
+
+
+
+## 8
+
+we group the chapters by using a regex and then count 1-grams and 2-grams for each chapter, we run chi-squared test on the numbers we get from counting each 1-gram/2-gram and get an answer if they are related or not.
+(since it takes a lot of time, memory and space to show I've run it for only one book)
+
+
+```{r , message=FALSE, warning=FALSE}
+
+chaptered_calculate <- function(book){
+
+chaptered_book <- book %>% mutate(chapter = cumsum(str_detect(text, regex("^chapter [\\divxlc]", ignore_case = TRUE))))
+  chapter_count = max(chaptered_book$chapter)
+  chart_list = list()
+  for (i in 1:chapter_count){
+    cur_chapter_book = chaptered_book[which(chaptered_book$chapter==i),]
+    cur_book_1gram <- cur_chapter_book %>% unnest_tokens(unigram, text, token = "ngrams", n = 1) 
+    cur_book_1gram <- cur_book_1gram %>% filter(!unigram %in% stop_words$word)
+    book_uni_count <- cur_book_1gram  %>% count(unigram, sort = TRUE)
+    cur_book_2gram <- cur_chapter_book %>% unnest_tokens(bigram, text, token = "ngrams", n = 2)
+    book_separated <- cur_book_2gram %>% separate(bigram, c("word1", "word2"), sep=" ")
+    book_separated <- book_separated %>% filter(!word1 %in% stop_words$word) %>% filter(!word2 %in% stop_words$word)
+    book_bi_count <- book_separated %>% count(word1, word2, sort = TRUE)  %>% unite(bigram, word1, word2, sep = " ")
+    hc1 <- hchart(head(book_bi_count,30) ,type = "column", title="Most common bigrams", hcaes(x = bigram, y=n))  %>% hc_add_theme(hc_theme_google())
+    hc2 <- hchart(head(book_uni_count,30) ,type = "column", title="Most common unigrams", hcaes(x = unigram, y=n))  %>% hc_add_theme(hc_theme_google())
+    minsize = min(nrow(book_bi_count),nrow(book_uni_count))
+    chisq.test(head(book_bi_count$n,minsize),head(book_uni_count$n,minsize))
+    chart_list[[2*i-1]] <- hc1
+    chart_list[[2*i]] <- hc2
+  }
+  htmltools::tagList(chart_list)
+}
+
+```
+
+```{r ,message=FALSE, warning=FALSE}
+chaptered_calculate(OliverTwist)
+#chaptered_calculate(ATaleofTwoCities)
+#chaptered_calculate(TheMysteryofEdwinDrood)
+#chaptered_calculate(ThePickwickPapers)
+#chaptered_calculate(TheOldCuriosityShop)
+#chaptered_calculate(DavidCopperfield)
+#chaptered_calculate(HardTimes)
+#chaptered_calculate(DombeyandSon)
+#chaptered_calculate(OurMutualFriend)
+#chaptered_calculate(BarnabyRudge)
+#chaptered_calculate(NicholasNickleby)
+#chaptered_calculate(MartinChuzzlewit)
+#chaptered_calculate(LittleDorrit)
+#chaptered_calculate(BleakHouse)
+#chaptered_calculate(GreatExpectations) 
+```
+
+
+
+## 9
+
+I couldn't find any books that would have the same encoding of chapters and length as Dickens (a sample is Tolstoy's works which did not work)
+
+
+```{r ,message=FALSE, warning=FALSE}
+
+Tolstoy_works = gutenberg_metadata %>% filter(author == "Tolstoy, Leo, graf" & language=="en" & has_text==TRUE & !is.na(gutenberg_bookshelf))
+
+WarAndPeace = gutenberg_download(2600)
+AnnaKarenina = gutenberg_download(1399)
+
+#chaptered_calculate(AnnaKarenina)
+#chaptered_calculate(WarAndPeace)
+
+
+```
+
+
+
+## 10
+
+since the previous question didn't have an answer this one can't be answered either
+
+```{r , message=FALSE, warning=FALSE}
+
+
+
+```
