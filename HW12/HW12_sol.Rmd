@@ -1,0 +1,333 @@
+---
+title: 'Association rules: Movie recommender systems'
+author: "Alaleh Ahmadian"
+date: "May 8, 2018"
+output:
+  prettydoc::html_pretty:
+    highlight: github
+    theme: HPSTR
+  rmarkdown::html_document: default
+  html_document:
+    df_print: paged
+---
+
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+
+## Libraries:
+
+```{r , message=FALSE, warning=FALSE}
+
+library(readr)
+library(dplyr)
+library(highcharter)
+library(tidyr)
+library(plotly)
+library(data.table)
+library(magrittr)
+library(stringr)
+library(stringi)
+library(tm)
+library(tidytext)
+library(arules)
+library(wordcloud2)
+library(arulesViz)
+library(rlist)
+
+```
+
+
+## Data:
+
+We use the latest data from this link:
+https://grouplens.org/datasets/movielens/latest/
+
+```{r , message=FALSE, warning=FALSE}
+
+movies = read.csv(file="C:/Users/Alaleh/Desktop/Term8/Data_Analysis/Data/ml-latest/movies.csv", header=T,  row.names=NULL)
+ratings = read.csv(file="C:/Users/Alaleh/Desktop/Term8/Data_Analysis/Data/ml-latest/ratings.csv", header=T,  row.names=NULL)
+links = read.csv(file="C:/Users/Alaleh/Desktop/Term8/Data_Analysis/Data/ml-latest/links.csv", header=T,  row.names=NULL)
+tags = read.csv(file="C:/Users/Alaleh/Desktop/Term8/Data_Analysis/Data/ml-latest/tags.csv", header=T,  row.names=NULL)
+
+```
+
+
+
+## 1
+
+Most favored movie:
+(Removed columns with low vote count to get the most popular movies)
+
+```{r , message=FALSE, warning=FALSE}
+
+temp_data = ratings
+temp_data %>% group_by(movieId) %>% summarize(rate = mean(rating), voteCount=n()) %>% left_join(movies) %>% arrange(-rate,-voteCount) %>% filter(voteCount>10000) -> temp_data
+
+hchart(head(temp_data,15), hcaes(x=title, y=rate), type="column") %>% hc_add_theme(hc_theme_google())
+
+```
+Movie with most comments:
+
+```{r , message=FALSE, warning=FALSE}
+
+temp_data %>% arrange(-voteCount) -> temp_data
+temp_data$title %>% as.character() -> temp_data$title
+
+hchart(head(temp_data,15), hcaes(x=title, y=voteCount), type="column") %>% hc_add_theme(hc_theme_google())
+
+```
+
+Most hated movies:
+(Removed movies with less than 1000 comments since they're)
+
+```{r , message=FALSE, warning=FALSE}
+
+temp_data = ratings
+temp_data %>% group_by(movieId) %>% summarise(rate = mean(rating), voteCount=n()) %>% left_join(movies) %>% arrange(rate,-voteCount) %>% filter(voteCount>500) -> temp_data
+
+hchart(head(temp_data,15), hcaes(x=title, y=rate), type="column") %>% hc_add_theme(hc_theme_google())
+
+```
+
+Number of movies made each year:
+
+```{r , message=FALSE, warning=FALSE}
+
+temp_data = ratings %>% left_join(movies)
+place = regexpr("\\)[^\\)]*$", temp_data$title)
+temp_data$year = str_sub(temp_data$title, place-4, place-1)
+temp_data %>% group_by(year) %>% summarise(yearCount = n()) -> temp_data
+temp_data = temp_data[temp_data$year>1800 & temp_data$year<2020,]
+
+hchart(temp_data, hcaes(x=year, y=yearCount), type="column") %>% hc_add_theme(hc_theme_google())
+
+```
+
+Favorite genre for each year:
+We calculate it by computing weighed mean of ratings and vote counts for each genre in each year and get the maximum rating genre which is the most favored genre of that year.
+
+```{r , message=FALSE, warning=FALSE}
+
+allGenres = movies$genres %>% as.character() %>% str_to_lower() %>% strsplit("[|]") %>% unlist() %>% unique() %>% data.frame() %>% select(Genre=".") %>% as.tbl() %>% na.omit() %>% as.data.frame() %>% head(19) -> allGenres
+
+temp_data = ratings
+temp_data %>% group_by(movieId) %>% summarise(rate = mean(rating), voteCount=n()) %>% left_join(movies) %>% arrange(-rate,-voteCount) -> temp_data
+
+place = regexpr("\\)[^\\)]*$", temp_data$title)
+temp_data$year = str_sub(temp_data$title, place-4, place-1)
+temp_data = temp_data[temp_data$year>1800 & temp_data$year<2020,]
+
+All_data = merge(temp_data, allGenres) 
+All_data$genres = All_data$genres %>% as.character() %>% str_to_lower()
+All_data$Genre = All_data$Genre %>% as.character() %>% str_to_lower()
+All_data = All_data[which(str_detect(All_data$genres, All_data$Genre)),]
+
+All_data %>% group_by(year, Genre) %>%
+  summarise(mean_rating = weighted.mean(rate, w = voteCount), voteCount=sum(voteCount)) %>%
+  top_n(1, mean_rating)
+
+
+```
+
+Since the data isn't diverse enough we get 2 or 3 genres for some years.
+
+
+## 2
+
+Number of movies for each genre:
+
+```{r , message=FALSE, warning=FALSE}
+
+movie_genre = merge(movies,allGenres)
+
+movie_genre$genres = movie_genre$genres %>% as.character() %>% str_to_lower()
+movie_genre$Genre = movie_genre$Genre %>% as.character() %>% str_to_lower()
+movie_genre = movie_genre[which(str_detect(movie_genre$genres, movie_genre$Genre)),]
+
+movie_genre %>% group_by(Genre) %>% summarise(movieCount = n()) %>% arrange(-movieCount) -> movie_genre
+
+hchart(movie_genre, hcaes(x=Genre, y=movieCount), type="column") %>% hc_add_theme(hc_theme_google())
+
+
+```
+
+
+Genres association matrix:
+
+```{r , message=FALSE, warning=FALSE}
+
+apriori_data = merge(movies,allGenres)
+associations = apriori(lapply(as.character(apriori_data$genres), FUN = function(x) strsplit(x,split = "[|]")[[1]]), parameter=list(support=0, confidence=0, minlen=2, maxlen=2))
+plot(associations, method="matrix", measure="confidence")
+
+```
+
+
+Mean rating for each genre:
+I once calculated this for the first question
+
+```{r , message=FALSE, warning=FALSE}
+
+temp_data = ratings
+temp_data %>% group_by(movieId) %>% summarise(rate = mean(rating), voteCount=n()) %>% left_join(movies) %>% arrange(-rate,-voteCount) -> temp_data
+place = regexpr("\\)[^\\)]*$", temp_data$title)
+temp_data$year = str_sub(temp_data$title, place-4, place-1)
+temp_data = temp_data[temp_data$year>1800 & temp_data$year<2020,]
+
+All_data = merge(temp_data, allGenres) 
+All_data$genres = All_data$genres %>% as.character() %>% str_to_lower()
+All_data$Genre = All_data$Genre %>% as.character() %>% str_to_lower()
+All_data = All_data[which(str_detect(All_data$genres, All_data$Genre)),]
+
+All_data %>% group_by(Genre) %>%
+  summarise(mean_rating = weighted.mean(rate, w = voteCount), voteCount=sum(voteCount)) %>% arrange(-mean_rating) -> All_data
+
+All_data
+
+hchart(All_data, hcaes(x=Genre, y=mean_rating), type="column") %>% hc_add_theme(hc_theme_google())
+
+```
+
+Golden age of movie making:
+We define it as the years with most movies made with high rates
+
+```{r , message=FALSE, warning=FALSE}
+
+temp_data = ratings %>% left_join(movies)
+place = regexpr("\\)[^\\)]*$", temp_data$title)
+temp_data$year = str_sub(temp_data$title, place-4, place-1)
+temp_data %>% group_by(year) %>% summarise(yearCount = n(), yearRate = mean(rating)) -> temp_data
+temp_data$goldness = temp_data$yearCount*temp_data$yearRate^5
+temp_data %>% arrange(-goldness)
+temp_data = temp_data[temp_data$year>1800 & temp_data$year<2020,]
+
+hchart(temp_data, hcaes(x=year, y=goldness), type="column") %>% hc_add_theme(hc_theme_google())
+
+```
+The golden age was from about 1993 to 2002
+
+## 3
+
+```{r , message=FALSE, warning=FALSE}
+
+temp_data = movies
+place = regexpr("\\([^\\()]*$", temp_data$title)
+temp_data$year = str_sub(temp_data$title, 0, place-1)
+temp_data$title %>% as.character() %>% strsplit("[^a-zA-Z]") %>% unlist() %>% data.frame() %>% select(word=".") %>% as.tbl() %>% na.omit() -> Words
+Words$word = as.character(str_to_lower(Words$word))
+
+Words %>% anti_join(stop_words) %>% group_by(word) %>% summarise(freq=n()) %>% arrange(-freq) -> Words 
+wordcloud2(head(Words,250), size=35, shape="cardioid", backgroundColor = "black")
+
+
+
+```
+
+
+
+## 4
+
+```{r , message=FALSE, warning=FALSE}
+
+association_data = left_join(ratings, movies) %>% select(userId, movieId, title, rating) %>% na.omit() %>% mutate(Hash = paste(userId, rating, sep="_"))
+association_data$title = as.character(association_data$title)
+
+func = function (x) {
+  as.character(levels(x)[x])
+}
+
+get_Associations = function (movieID){
+  
+  Name = as.character(movies$title[which(movies$movieId==movieID)])
+  association_data %>% filter(movieId==movieID) %>% select(userId, rating) -> movieData 
+  movieData$Hash = paste(movieData$userId, movieData$rating, sep = "_")
+
+  association_data %>% filter(Hash %in% movieData$Hash) %>% select(title,userId) -> sample
+  sample_list <- split(sample$title,sample$userId)
+  
+  Allrules = apriori(sample_list, parameter=list(support=0.5, confidence=0.5, minlen=2, maxlen=2))
+plot(associations, method="matrix", measure="confidence")
+  summary(Allrules)
+  t = as(Allrules, "data.frame") 
+  u <- t[order(t$confidence),] 
+  head(u,50) 
+}
+
+get_Associations(4022)
+get_Associations(55820)
+get_Associations(4226)
+
+
+```
+
+## 5
+
+https://github.com/Alaleh/Data_Analysis_R
+
+
+## 6
+
+Insufficent data in course slides (sometimes just the title and not much explanation on it)
+
+Class was too early in the morning (I, myself missed some sessions because of this and I'm sure many other people have too)
+
+Sometimes inclomplete explanation of why we do a test and how it actually gives us the answer (I still don't know the reason behind some of the codes but maybe that's just my problem)
+
+Tried to cover too many topics and the result was not getting a deep enough understanding of some parts by students
+
+Short TA class in a bad time
+
+## 7
+
+Classes in the afternoon
+
+Less topics but with deeper explanations
+
+Less exercises (After a while it gets redundant and instead of being helpful to learning it just 
+gets painful)
+
+distributing class codes on cw so everyone can use them
+
+coding sessions in TA classes
+
+
+## 8
+
+Time series (we saw this briefly on the course but never got into it)
+
+Bayesian networks
+
+Markov chains
+
+Neural networks
+
+More machine learning (H2o didn't cover 1% of it)
+
+Crawling 
+
+Big data
+
+
+## 9
+
+population control rates in iran and world (has government policies actually had an effect on population?)
+
+Fifa worldcups data and estimating the winner of 2022
+
+Water resources around the world and determining when each country or region will run out of water by the current rate
+
+
+## 10
+
+Never trust The data you see before doing hypithesis test (you can't assume something just because it seems so on first glance)
+
+You can't always have strong evidence for a hypothesis but you can't reject it (Some questions don't have answers)
+
+The answers you get depend on where you get the data so always work with dependable sources
+
+The most important thing I learned is that I now have a different view towrds the world around me
